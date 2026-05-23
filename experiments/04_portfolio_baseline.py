@@ -34,6 +34,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.linalg import sqrtm
+from csv_utils import load_returns_csv
 
 np.random.seed(42)
 os.makedirs("figures", exist_ok=True)
@@ -237,9 +238,9 @@ def bootstrap_sharpe_ci(daily_rets, test_start="2022-01-01",
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    train_df = pd.read_csv("data/train_2014_2020.csv", index_col=0, parse_dates=True)
-    val_df   = pd.read_csv("data/val_2021.csv",         index_col=0, parse_dates=True)
-    test_df  = pd.read_csv("data/test_2022_2024.csv",   index_col=0, parse_dates=True)
+    train_df = load_returns_csv("data/train_2014_2020.csv")
+    val_df   = load_returns_csv("data/val_2021.csv")
+    test_df  = load_returns_csv("data/test_2022_2024.csv")
     all_df   = pd.concat([train_df, val_df, test_df]).sort_index()
 
     generated = np.load("data/scenarios_base.npy")

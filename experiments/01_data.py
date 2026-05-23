@@ -28,7 +28,14 @@ TEST_START,  TEST_END  = "2022-01-01", "2024-12-31"
 
 os.makedirs("data", exist_ok=True)
 
-raw = yf.download(TICKERS, start=START, end=END, auto_adjust=True, progress=False)["Close"]
+_dl = yf.download(TICKERS, start=START, end=END, auto_adjust=True, progress=False)
+# Handle both old single-level and new multi-level yfinance column formats
+if isinstance(_dl.columns, pd.MultiIndex):
+    raw = _dl["Close"]
+else:
+    raw = _dl["Close"]
+raw.columns.name = None   # remove yfinance 'Ticker' label so to_csv() writes a clean single-header CSV
+raw.index.name = "Date"
 raw = raw.dropna()
 
 returns = np.log(raw / raw.shift(1)).dropna()

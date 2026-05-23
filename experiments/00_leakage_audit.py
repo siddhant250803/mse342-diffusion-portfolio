@@ -61,6 +61,13 @@ def date_range_of_csv(path):
     if not os.path.exists(path):
         return None, None
     df = pd.read_csv(path, index_col=0, parse_dates=True)
+    # parse_dates=True may not convert the index if it looks like strings
+    if not pd.api.types.is_datetime64_any_dtype(df.index):
+        df.index = pd.to_datetime(df.index, errors="coerce")
+    # Drop NaT rows introduced by failed parses
+    df = df[df.index.notna()]
+    if df.empty:
+        return None, None
     return df.index.min(), df.index.max()
 
 

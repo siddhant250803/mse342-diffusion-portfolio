@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 from scipy.linalg import sqrtm
 from score_model import ScoreNet, get_alpha_sigma, BETA_MIN, BETA_MAX
+from csv_utils import load_returns_csv
 
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 os.makedirs("figures", exist_ok=True)
@@ -189,7 +190,7 @@ if __name__ == "__main__":
         n_samples = int(sys.argv[sys.argv.index("--n_samples") + 1])
 
     model, mu, std, ckpt_meta = load_model("checkpoints/score_model_base.pt")
-    train_df  = pd.read_csv("data/train_2014_2020.csv", index_col=0, parse_dates=True)
+    train_df  = load_returns_csv("data/train_2014_2020.csv")
     col_names = list(train_df.columns)
     train_data = train_df.values
 

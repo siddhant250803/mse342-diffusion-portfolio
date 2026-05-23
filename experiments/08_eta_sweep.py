@@ -29,6 +29,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from score_model import ScoreNet, get_alpha_sigma, BETA_MIN, BETA_MAX
+from csv_utils import load_returns_csv
 
 torch.manual_seed(0)
 DEVICE   = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -193,10 +194,10 @@ if __name__ == "__main__":
     n_gen     = 500 if fast_mode else 2000
 
     # Load training data (for Sigma only — theory mode not used here)
-    train_df = pd.read_csv("data/train_2014_2020.csv", index_col=0, parse_dates=True)
+    train_df = load_returns_csv("data/train_2014_2020.csv")
 
     # Load validation data (2021 only — for reward and selection metric)
-    val_df   = pd.read_csv("data/val_2021.csv", index_col=0, parse_dates=True)
+    val_df   = load_returns_csv("data/val_2021.csv")
     r_val_np = val_df.values
     r_val_tensor = torch.tensor(r_val_np, dtype=torch.float32)
     print(f"Validation period: {val_df.index[0].date()} to {val_df.index[-1].date()}")

@@ -53,6 +53,17 @@ except ImportError:
 
 from score_model import ScoreNet, get_alpha_sigma, BETA_MIN, BETA_MAX
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+print(f"Device: {DEVICE}")
+
+
+def _load_returns_csv(path):
+    """Robust CSV loader that handles yfinance multi-row headers and pandas 2.x date parsing."""
+    df = pd.read_csv(path, index_col=0)
+    if not pd.api.types.is_datetime64_any_dtype(df.index):
+        df.index = pd.to_datetime(df.index, errors="coerce")
+    df = df[df.index.notna()]
+    df = df.apply(pd.to_numeric, errors="coerce").dropna(how="all")
+    return df
 
 
 # ── Level 1: Gaussian OT ──────────────────────────────────────────────────────
@@ -137,7 +148,7 @@ def train_ot_augmented(train_path="data/train_2014_2020.csv",
     All data used is from 2014-2020 training split only.
     """
     torch.manual_seed(seed)
-    df   = pd.read_csv(train_path, index_col=0, parse_dates=True)
+    df   = _load_returns_csv(train_path)
     X    = torch.tensor(df.values, dtype=torch.float32)
     mu   = X.mean(0); std = X.std(0) + 1e-8
     X_norm = (X - mu) / std
@@ -330,7 +341,7 @@ if __name__ == "__main__":
     ot_aug_epochs    = 100 if fast_mode else 500
 
     # Load training data (OT target — 2014-2020 only)
-    train_df  = pd.read_csv("data/train_2014_2020.csv", index_col=0, parse_dates=True)
+    train_df  = _load_returns_csv("data/train_2014_2020.csv")
     col_names = list(train_df.columns)
     X_real    = train_df.values
     print(f"Training data (OT target): {X_real.shape}  "

@@ -23,6 +23,7 @@ from portfolio_baseline import (
     mvo, compute_metrics, bootstrap_sharpe_ci, backtest,
     LAMBDA, robust_mvo, diffusion_mvo,
 )
+from csv_utils import load_returns_csv
 
 os.makedirs("figures", exist_ok=True)
 os.makedirs("results", exist_ok=True)
@@ -233,9 +234,9 @@ if __name__ == "__main__":
         print("Run 08_eta_sweep.py first to select eta on validation data.")
         sys.exit(1)
 
-    train_df = pd.read_csv("data/train_2014_2020.csv", index_col=0, parse_dates=True)
-    val_df   = pd.read_csv("data/val_2021.csv",         index_col=0, parse_dates=True)
-    test_df  = pd.read_csv("data/test_2022_2024.csv",   index_col=0, parse_dates=True)
+    train_df = load_returns_csv("data/train_2014_2020.csv")
+    val_df   = load_returns_csv("data/val_2021.csv")
+    test_df  = load_returns_csv("data/test_2022_2024.csv")
     all_df   = pd.concat([train_df, val_df, test_df]).sort_index()
 
     print(f"Test period: {test_df.index[0].date()} to {test_df.index[-1].date()}")

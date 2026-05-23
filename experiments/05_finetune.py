@@ -43,6 +43,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from score_model import ScoreNet, get_alpha_sigma, BETA_MIN, BETA_MAX
+from csv_utils import load_returns_csv
 
 torch.manual_seed(0)
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -282,13 +283,13 @@ if __name__ == "__main__":
     mu, std = ckpt["mu"].float(), ckpt["std"].float()
 
     # Sigma from training data only (for theory mode)
-    train_df = pd.read_csv("data/train_2014_2020.csv", index_col=0, parse_dates=True)
+    train_df = load_returns_csv("data/train_2014_2020.csv")
     Sigma_real     = np.cov(train_df.values.T)
     Sigma_inv_real = torch.tensor(
         np.linalg.inv(Sigma_real + 1e-5 * np.eye(d)), dtype=torch.float32)
 
     # Validation returns (2021 only — for portfolio reward)
-    val_df        = pd.read_csv("data/val_2021.csv", index_col=0, parse_dates=True)
+    val_df        = load_returns_csv("data/val_2021.csv")
     r_val_tensor  = torch.tensor(val_df.values, dtype=torch.float32)
 
     tag = f"base_{reward_mode}_eta{eta}"

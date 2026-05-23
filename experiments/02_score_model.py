@@ -26,6 +26,7 @@ import pandas as pd
 import json
 import os
 import hashlib
+from csv_utils import load_returns_csv
 
 torch.manual_seed(42)
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -76,7 +77,7 @@ def train_score_model(train_path="data/train_2014_2020.csv",
     torch.manual_seed(seed)
 
     # Load train — scaler fitted here and ONLY here
-    df_train = pd.read_csv(train_path, index_col=0, parse_dates=True)
+    df_train = load_returns_csv(train_path)
     X_train  = torch.tensor(df_train.values, dtype=torch.float32)
     mu  = X_train.mean(0)
     std = X_train.std(0) + 1e-8
@@ -84,7 +85,7 @@ def train_score_model(train_path="data/train_2014_2020.csv",
     N_train, d = X_train_norm.shape
 
     # Load val (transform with TRAINING scaler — no fitting)
-    df_val = pd.read_csv(val_path, index_col=0, parse_dates=True)
+    df_val = load_returns_csv(val_path)
     X_val  = torch.tensor(df_val.values, dtype=torch.float32)
     X_val_norm = (X_val - mu) / std
 
