@@ -1,0 +1,20 @@
+{
+  "checkpoint": "checkpoints/score_model_base.pt",
+  "scaler_fitted_on": "train_2014_2020",
+  "train_start": "2014-01-01",
+  "train_end": "2020-12-31",
+  "val_start": "2021-01-01",
+  "val_end": "2021-12-31",
+  "test_start": "N/A \u2014 not used",
+  "test_end": "N/A",
+  "data_used_for_fit": "train_2014_2020",
+  "data_used_for_selection": "none",
+  "data_used_for_evaluation": "none",
+  "n_samples": 500,
+  "n_steps": 100,
+  "seed": 42,
+  "nan_fraction": 0.0,
+  "inf_fraction": 0.0,
+  "bures_wasserstein": 0.03033874837173711,
+  "hhi_gen": 0.629084958606424
+}

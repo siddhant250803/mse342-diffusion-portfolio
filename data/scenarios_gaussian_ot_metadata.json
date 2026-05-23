@@ -1,0 +1,16 @@
+{
+  "method": "gaussian_ot",
+  "source": "scenarios_base.npy",
+  "target": "train_2014_2020.csv",
+  "train_start": "2014-01-01",
+  "train_end": "2020-12-31",
+  "val_start": "2021-01-01",
+  "val_end": "2021-12-31",
+  "test_start": "N/A",
+  "data_used_for_fit": "train_2014_2020",
+  "data_used_for_selection": "none",
+  "data_used_for_evaluation": "none",
+  "w2_before": 0.03033874837173711,
+  "w2_after": 0.000258063957340441,
+  "limitation": "Gaussian OT corrects first two moments only. Non-Gaussian structure (tails, skew) is not corrected."
+}

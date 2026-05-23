@@ -1,0 +1,2 @@
+,model,selected_eta,selection_metric,validation_score,tag,scenarios_path,val_start,val_end,test_metrics,reward_mode,note
+base,base,0.5,validation_sharpe,2.3012524650008825,base_eta0.5,data/ft_base_eta0.5_scenarios.npy,2021-01-01,2021-12-31,NOT AVAILABLE — use 06_compare.py after eta is frozen,portfolio_validation_reward,Eta selected on validation data only. No test data used.

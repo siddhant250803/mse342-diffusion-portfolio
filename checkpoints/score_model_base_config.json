@@ -1,0 +1,22 @@
+{
+  "epochs": 100,
+  "batch": 256,
+  "lr": 0.001,
+  "hidden": 256,
+  "t_emb_dim": 64,
+  "seed": 42,
+  "beta_min": 0.1,
+  "beta_max": 20.0,
+  "train_start": "2014-01-01",
+  "train_end": "2020-12-31",
+  "val_start": "2021-01-01",
+  "val_end": "2021-12-31",
+  "test_start": "N/A \u2014 not used",
+  "data_used_for_fit": "train_2014_2020",
+  "data_used_for_selection": "val_2021 (monitoring only)",
+  "data_used_for_evaluation": "none",
+  "scaler_fitted_on": "train_2014_2020",
+  "n_train": 1317,
+  "d": 10,
+  "final_train_loss": 0.22684791684150696
+}

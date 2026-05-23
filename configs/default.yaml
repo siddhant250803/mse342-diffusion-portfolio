@@ -1,0 +1,105 @@
+
+# MS&E 342 Project — Default Configuration
+# All date ranges, hyperparameters, and output paths are centralized here.
+# Override at the command line: python run_project.py <stage> --epochs 100
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+data:
+  tickers: [XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLB, XLRE]
+  start: "2014-01-01"
+  end:   "2024-12-31"
+  train_start: "2014-01-01"
+  train_end:   "2020-12-31"
+  val_start:   "2021-01-01"
+  val_end:     "2021-12-31"
+  test_start:  "2022-01-01"
+  test_end:    "2024-12-31"
+
+# ── Score model ───────────────────────────────────────────────────────────────
+score_model:
+  epochs: 2000
+  batch:  256
+  lr:     1.0e-3
+  hidden: 256
+  t_emb_dim: 64
+  beta_min: 0.1
+  beta_max: 20.0
+  seed: 42
+
+# ── Scenario generation ───────────────────────────────────────────────────────
+sampling:
+  n_samples: 10000
+  n_steps:   500
+  seed: 42
+
+# Fast-mode overrides (--fast flag) ───────────────────────────────────────────
+fast:
+  score_model_epochs: 100
+  n_samples: 500
+  n_steps:   100
+  finetune_epochs: 50
+  eta_sweep_finetune_epochs: 30
+
+# ── OT calibration ────────────────────────────────────────────────────────────
+ot:
+  gaussian: true
+  sinkhorn_subset_size: 600
+  sinkhorn_reg: 0.005
+  sinkhorn_n_iter: 500
+  ot_augmented_gamma: 0.05
+  ot_augmented_epochs: 500
+  seed: 42
+
+# ── Fine-tuning ───────────────────────────────────────────────────────────────
+finetune:
+  reward_mode: portfolio_validation_reward   # or theory_quadratic
+  epochs: 300
+  batch: 128
+  lr: 3.0e-4
+  n_steps: 200
+  lambda_risk: 5.0
+  gamma_cvar: 0.5     # weight on CVaR95 penalty
+  tau_conc: 0.1       # weight on HHI concentration penalty
+  ridge: 1.0e-4       # ridge for differentiable MVO
+  ctrl_scale: 1.5     # tanh soft bound on control
+  seed: 0
+
+# ── Eta sweep ────────────────────────────────────────────────────────────────
+eta_sweep:
+  eta_values: [0.05, 0.1, 0.5, 1.0, 5.0]
+  base_models: [base]        # can add "ot_augmented" if trained
+  finetune_epochs: 200
+  n_steps: 100
+  batch: 128
+  selection_metric: sharpe   # metric for validation-based eta selection
+  seed: 0
+
+# ── Backtest ─────────────────────────────────────────────────────────────────
+backtest:
+  lambda_risk: 5.0
+  window: 252           # rolling window (trading days)
+  delta: 0.02           # Wasserstein radius for robust MVO
+  rebal_freq: ME        # pandas offset alias for month-end
+  n_bootstrap: 2000
+  bootstrap_seed: 42
+
+# ── Portfolio constraints ─────────────────────────────────────────────────────
+portfolio:
+  max_weight: 1.0       # max single-asset weight (long-only)
+  min_weight: 0.0
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+paths:
+  data:        data/
+  checkpoints: checkpoints/
+  figures:     figures/
+  results:     results/
+
+# ── Random seeds ─────────────────────────────────────────────────────────────
+seeds:
+  global: 42
+  score_model: 42
+  sampling: 42
+  finetune: 0
+  eta_sweep: 0
+  bootstrap: 42

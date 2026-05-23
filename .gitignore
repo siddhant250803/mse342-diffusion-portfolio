@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+
+# LaTeX artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.blg
+*.bbl
+*.bcf
+*.run.xml
+
+# Large model checkpoints (keep .pt files but skip .npy if large)
+# Keep checkpoints tracked (they're small for this project)
+
+# MacOS
+.DS_Store
+**/.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temp
+*.tmp

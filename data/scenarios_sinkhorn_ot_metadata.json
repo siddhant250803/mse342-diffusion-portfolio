@@ -1,0 +1,16 @@
+{
+  "method": "sinkhorn_ot_subset_only",
+  "subset_size": 500,
+  "reg": 0.005,
+  "source": "scenarios_base.npy (subset)",
+  "target": "train_2014_2020.csv (subset)",
+  "train_start": "2014-01-01",
+  "train_end": "2020-12-31",
+  "data_used_for_fit": "train_2014_2020 subset",
+  "data_used_for_selection": "none",
+  "data_used_for_evaluation": "none",
+  "test_start": "N/A",
+  "w2_before": 0.02950307356568976,
+  "w2_after": 0.02045344963200392,
+  "limitation": "Sinkhorn OT applied to a subset only. Full-set extension would require nearest-neighbour or kernel-smoothed barycentric map. Not used as a full portfolio strategy."
+}

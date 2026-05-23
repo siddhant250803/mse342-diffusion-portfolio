@@ -1,0 +1,70 @@
+% Minimal NeurIPS 2024 style file
+% Based on public NeurIPS formatting guidelines
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{neurips_2024}[2024/01/01 NeurIPS 2024]
+
+\DeclareOption{preprint}{\newcommand{\@preprint}{}}
+\DeclareOption{final}{}
+\ProcessOptions\relax
+
+% Page geometry
+\RequirePackage[
+  paperwidth=8.5in,
+  paperheight=11in,
+  left=1.5in,
+  right=1.5in,
+  top=1in,
+  bottom=1in,
+  headheight=14pt
+]{geometry}
+
+% Fonts
+\RequirePackage{times}
+\RequirePackage{helvet}
+\RequirePackage{courier}
+
+% Line spacing
+\linespread{1.05}
+
+% Section formatting
+\RequirePackage{titlesec}
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\itshape}{\thesubsubsection}{1em}{}
+\titlespacing*{\section}{0pt}{10pt}{5pt}
+\titlespacing*{\subsection}{0pt}{8pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{6pt}{3pt}
+
+% Abstract
+\renewenvironment{abstract}{%
+  \begin{center}
+    \textbf{Abstract}
+  \end{center}
+  \begin{quote}
+}{%
+  \end{quote}
+}
+
+% Caption formatting
+\RequirePackage[font=small,labelfont=bf,margin=5pt]{caption}
+
+% Paragraph
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+
+% Header/footer
+\RequirePackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\small MS\&E 342 -- Stanford University -- Spring 2026}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Hyperref options
+\RequirePackage[
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=green!50!black,
+  urlcolor=blue!60!black,
+  pdfborder={0 0 0}
+]{hyperref}
