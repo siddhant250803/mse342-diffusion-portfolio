@@ -32,7 +32,7 @@ from score_model import ScoreNet, get_alpha_sigma, BETA_MIN, BETA_MAX
 from csv_utils import load_returns_csv
 
 torch.manual_seed(0)
-DEVICE   = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE   = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 LAMBDA   = 5.0
 N_STEPS  = 100
 BATCH    = 128

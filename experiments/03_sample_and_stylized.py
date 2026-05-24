@@ -27,7 +27,7 @@ from scipy.linalg import sqrtm
 from score_model import ScoreNet, get_alpha_sigma, BETA_MIN, BETA_MAX
 from csv_utils import load_returns_csv
 
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 os.makedirs("figures", exist_ok=True)
 os.makedirs("results", exist_ok=True)
 os.makedirs("data",    exist_ok=True)

@@ -10,7 +10,7 @@
   "data_used_for_fit": "train_2014_2020",
   "data_used_for_selection": "none",
   "data_used_for_evaluation": "none",
-  "w2_before": 0.03033874837173711,
-  "w2_after": 0.000258063957340441,
+  "w2_before": 0.030886936240798947,
+  "w2_after": 0.00033978405212627003,
   "limitation": "Gaussian OT corrects first two moments only. Non-Gaussian structure (tails, skew) is not corrected."
 }

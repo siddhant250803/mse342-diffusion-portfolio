@@ -29,7 +29,7 @@ import hashlib
 from csv_utils import load_returns_csv
 
 torch.manual_seed(42)
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 print(f"Device: {DEVICE}")
 
 # ── VP-SDE schedule ──────────────────────────────────────────────────────────

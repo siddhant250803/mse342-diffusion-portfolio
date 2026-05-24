@@ -1,11 +1,24 @@
 {
+  "ot_augmented": {
+    "model": "ot_augmented",
+    "selected_eta": 1.0,
+    "selection_metric": "validation_sharpe",
+    "validation_score": 3.2338116848242224,
+    "tag": "ot_augmented_eta1.0",
+    "scenarios_path": "data/ft_ot_augmented_eta1.0_scenarios.npy",
+    "val_start": "2021-01-01",
+    "val_end": "2021-12-31",
+    "test_metrics": "NOT AVAILABLE \u2014 use 06_compare.py after eta is frozen",
+    "reward_mode": "portfolio_validation_reward",
+    "note": "Eta selected on validation data only. No test data used."
+  },
   "base": {
     "model": "base",
-    "selected_eta": 0.5,
+    "selected_eta": 0.05,
     "selection_metric": "validation_sharpe",
-    "validation_score": 2.3012524650008825,
-    "tag": "base_eta0.5",
-    "scenarios_path": "data/ft_base_eta0.5_scenarios.npy",
+    "validation_score": 3.13556969765941,
+    "tag": "base_eta0.05",
+    "scenarios_path": "data/ft_base_eta0.05_scenarios.npy",
     "val_start": "2021-01-01",
     "val_end": "2021-12-31",
     "test_metrics": "NOT AVAILABLE \u2014 use 06_compare.py after eta is frozen",

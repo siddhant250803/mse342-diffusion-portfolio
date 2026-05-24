@@ -1,0 +1,12 @@
+{
+  "epochs": 500,
+  "batch": 256,
+  "lr": 0.001,
+  "gamma": 0.05,
+  "seed": 42,
+  "train_start": "2014-01-01",
+  "train_end": "2020-12-31",
+  "data_used_for_fit": "train_2014_2020",
+  "data_used_for_selection": "none",
+  "data_used_for_evaluation": "none"
+}

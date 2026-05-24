@@ -1,5 +1,5 @@
 {
-  "epochs": 100,
+  "epochs": 2000,
   "batch": 256,
   "lr": 0.001,
   "hidden": 256,
@@ -18,5 +18,5 @@
   "scaler_fitted_on": "train_2014_2020",
   "n_train": 1317,
   "d": 10,
-  "final_train_loss": 0.22684791684150696
+  "final_train_loss": 0.1573922038078308
 }

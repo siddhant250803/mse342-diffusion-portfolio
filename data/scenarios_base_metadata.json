@@ -10,11 +10,11 @@
   "data_used_for_fit": "train_2014_2020",
   "data_used_for_selection": "none",
   "data_used_for_evaluation": "none",
-  "n_samples": 500,
-  "n_steps": 100,
+  "n_samples": 10000,
+  "n_steps": 500,
   "seed": 42,
   "nan_fraction": 0.0,
   "inf_fraction": 0.0,
-  "bures_wasserstein": 0.03033874837173711,
-  "hhi_gen": 0.629084958606424
+  "bures_wasserstein": 0.030886936240798947,
+  "hhi_gen": 0.999999741661158
 }

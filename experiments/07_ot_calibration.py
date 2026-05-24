@@ -52,7 +52,7 @@ except ImportError:
     print("WARNING: POT (Python Optimal Transport) not found. Sinkhorn OT will be skipped.")
 
 from score_model import ScoreNet, get_alpha_sigma, BETA_MIN, BETA_MAX
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 print(f"Device: {DEVICE}")
 
 
