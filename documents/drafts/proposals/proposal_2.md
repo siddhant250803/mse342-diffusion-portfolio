@@ -11,7 +11,7 @@
 
 Generative diffusion models have recently emerged as powerful tools for simulating financial return distributions. However, existing work uses the diffusion model as a **passive, frozen scenario generator**: paths are sampled from the learned distribution and fed into a downstream optimizer, with no feedback from the portfolio objective back to the generative model. This decoupling is a fundamental inefficiency. Scenarios that are statistically realistic in a generic sense need not be decision-relevant; a model that generates accurate average-day returns may poorly cover the tail events that dominate portfolio risk.
 
-This project asks: **can we fine-tune the reverse SDE drift of a diffusion model under a portfolio-utility reward, using the stochastic control framework developed in this course, to generate scenarios that are both realistic and decision-relevant?**
+This project asks: **can we fine-tune the reverse SDE drift of a diffusion model under a portfolio-utility reward, using KL-penalized stochastic control, to generate scenarios that are both realistic and decision-relevant?**
 
 ---
 
@@ -30,11 +30,11 @@ and the Fokker–Planck equation governs the density evolution $\partial_t p_t =
 
 ### 2.2 Score Function and Reverse SDE
 
-A score network $s_\theta(x,t) \approx \nabla \log p_t(x)$ is trained via **denoising score matching** (Proposition 2.1 in Lecture 2-3):
+A score network $s_\theta(x,t) \approx \nabla \log p_t(x)$ is trained via **denoising score matching**:
 
 $$\mathcal{L}(\theta) = \mathbb{E}_{t,X_0,\varepsilon}\!\left[\left\| s_\theta(X_t, t) + \frac{\varepsilon}{\sigma_t} \right\|^2\right], \quad \varepsilon \sim \mathcal{N}(0,I), \quad X_t = \alpha_t X_0 + \sigma_t \varepsilon$$
 
-The **time-reversal theorem** (Lecture 2-3, §2) gives the reverse SDE:
+The **time-reversal theorem** gives the reverse SDE:
 
 $$dY_t = \left[-\frac{\beta(T{-}t)}{2} Y_t + \beta(T{-}t)\, s_\theta(Y_t, T{-}t)\right]dt + \sqrt{\beta(T{-}t)}\, d\tilde{W}_t$$
 
@@ -48,7 +48,7 @@ $$U(r) = \frac{1}{2\lambda} r^\top \Sigma^{-1} r$$
 
 ### 2.4 Fine-Tuning as KL-Penalized Stochastic Control
 
-Following **Han, Razaviyayn & Xu (ICML 2025)** — the course instructor's own work — we introduce a control perturbation $u_\phi(Y_t, t)$ to the reverse drift and solve:
+Following **Han, Razaviyayn & Xu (ICML 2025)**, we introduce a control perturbation $u_\phi(Y_t, t)$ to the reverse drift and solve:
 
 $$\max_\phi \; \mathbb{E}_{p_\phi}\!\left[U(Y_T)\right] - \eta \cdot \mathrm{KL}(p_\phi \,\|\, p_\theta)$$
 
@@ -60,11 +60,11 @@ $$dY_t = \underbrace{\left[-\frac{\beta(T{-}t)}{2} Y_t + \beta(T{-}t)\, s_\theta
 
 $$\mathrm{KL}(p_\phi \,\|\, p_\theta) = \mathbb{E}\!\left[\int_0^T \frac{\|u_\phi(Y_t, t)\|^2}{2\,\beta(T{-}t)}\, dt\right]$$
 
-This is precisely the **entropy-regularized HJB structure** from Lecture 7. The Hamiltonian maximization $\sup_u\{u \cdot \nabla_y V - \frac{\eta}{2\beta}\|u\|^2\}$ yields optimal control $u^*(t,y) = \frac{\beta(T-t)}{\eta}\nabla_y V(t,y)$, and $V$ solves:
+This is an **entropy-regularized HJB structure**: the optimal perturbation satisfies $u^*(t,y) = \eta \nabla_y V(t,y)$ where $V$ solves:
 
-$$\partial_t V + \mathcal{L}^{s_\theta} V + \frac{\beta(T-t)}{2\eta} \|\nabla_y V\|^2 = 0, \qquad V(T, y) = U(y)$$
+$$\partial_t V + \mathcal{L}^{s_\theta} V + \frac{\eta}{2} \|\nabla_y V\|^2 = 0, \qquad V(T, y) = U(y)$$
 
-The KL penalty η controls the **distributional budget**: small η makes the control cost cheap, so $u^*$ can be large (aggressive reward-seeking); large η keeps the fine-tuned distribution close to the base model (preserving realism). This is the continuous-time analogue of Wasserstein robustness (Blanchet, Chen & Zhou 2022).
+The KL penalty η controls the **distributional budget**: small η allows large drifts (aggressive reward-seeking), large η keeps the fine-tuned distribution close to the base model (preserving realism). This is the continuous-time analogue of Wasserstein robustness (Blanchet, Chen & Zhou 2022).
 
 ---
 
@@ -101,7 +101,7 @@ These preliminary results motivate **three concrete improvements** for the full 
 
 ## 4. Proposed Contributions
 
-**Contribution 1 (Theory).** Derive the HJB equation for the KL-penalized portfolio fine-tuning problem explicitly. The correct optimal control is $u^*(t,y) = \frac{\beta(T-t)}{\eta}\nabla_y V(t,y)$ (η in the denominator, not numerator — see Section 2.4). In the linear-Gaussian special case ($p_\text{data} = \mathcal{N}(\mu,\Sigma)$ with exact score), the value function is quadratic and the optimal terminal control is $u^*(T,y) = \frac{\beta(T)}{\eta\lambda}\Sigma^{-1}y$ — a drift in the Markowitz direction of maximum Sharpe ratio, with magnitude inversely proportional to the KL budget η.
+**Contribution 1 (Theory).** Derive the HJB equation for the KL-penalized portfolio fine-tuning problem explicitly and verify that the optimal control $u^*(t,y) = \eta \nabla_y V(t,y)$ satisfies an entropy-regularized optimality condition. Show that in the linear-Gaussian special case ($p_\text{data}$ Gaussian), the optimal $u^*$ has a closed form equal to a mean-shift proportional to $\Sigma^{-1}(\mu^* - \mu_\text{base})$ where $\mu^*$ is the reward-maximizing mean.
 
 **Contribution 2 (Empirics).** Run the full experimental pipeline (2000 epochs, cross-validated η) and compare:
 
@@ -123,18 +123,18 @@ Evaluate over 2022–2024 test period (includes 2022 rate shock — the most sev
 
 ---
 
-## 5. Course Connections
+## 5. Technical Ingredients
 
-| Course content | Where it appears in this project |
+| Technical ingredient | Where it appears in this project |
 |---|---|
-| Fokker–Planck equation (Lec 2) | Density evolution under VP-SDE forward process |
-| Time-reversal theorem (Lec 2-3) | Reverse SDE derivation for scenario generation |
-| Denoising score matching (Lec 2-3) | Score network training objective |
-| Tweedie's formula (Lec 2-3) | Denoised return estimate $\mathbb{E}[X_0 \mid X_t]$ |
-| HJB equation (Lec 7) | Optimality condition for fine-tuned control $u^*$ |
-| Entropy-regularized HJB (Lec 7, §7.1–7.2) | KL-penalized objective structure |
+| Fokker–Planck equation | Density evolution under VP-SDE forward process |
+| Time-reversal theorem | Reverse SDE derivation for scenario generation |
+| Denoising score matching | Score network training objective |
+| Tweedie's formula | Denoised return estimate $\mathbb{E}[X_0 \mid X_t]$ |
+| HJB equation | Optimality condition for fine-tuned control $u^*$ |
+| Entropy-regularized HJB | KL-penalized objective structure |
 | Girsanov theorem / KL as quadratic cost | KL = $\mathbb{E}[\int \|u\|^2 / 2\beta \, dt]$ |
-| RLHF as stochastic control (Lec 13) | Fine-tuning formulation and policy iteration |
+| Reference-policy reward fine-tuning | Fine-tuning formulation and policy iteration |
 
 ---
 

@@ -1,0 +1,797 @@
+\documentclass{article}
+
+\usepackage[preprint]{neurips_2024}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{microtype}
+\usepackage{nicefrac}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{natbib}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\KL}{\mathrm{KL}}
+\newcommand{\calN}{\mathcal{N}}
+\newcommand{\bmu}{\boldsymbol{\mu}}
+\newcommand{\bSigma}{\boldsymbol{\Sigma}}
+\newcommand{\bpi}{\boldsymbol{\pi}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\by}{\mathbf{y}}
+\newcommand{\bu}{\mathbf{u}}
+
+\title{Reward-Conditioned Diffusion Scenarios for Portfolio Optimization}
+
+\author{%
+  Siddhant Sukhani \\
+  Department of Management Science \& Engineering \\
+  Stanford University \\
+  \texttt{siddhantsukhani5@gmail.com} \\
+  MS\&E 342: Stochastic Control and Optimization in Continuous Time
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report studies whether score-based diffusion scenarios can improve portfolio
+construction after distributional calibration and reward-conditioned
+fine-tuning. The pipeline trains a variance-preserving stochastic differential
+equation score model on ten S\&P 500 sector ETF daily log returns from 2014 to
+2020, evaluates hyperparameters only on 2021 validation returns, and reserves
+2022 to 2024 for final testing. Gaussian Bures-Wasserstein optimal transport is
+used to match generated first and second moments to training moments. A
+KL-penalized reverse-diffusion control network is then trained with a
+decision-aligned validation reward. The production evaluation passes the
+leakage audit with zero failures and zero warnings. The strongest
+fixed-scenario diffusion baseline obtains Sharpe 0.454,
+while the validation-selected fine-tuned models underperform out of sample in
+fixed mode. In rolling mode, all diffusion variants collapse toward rolling
+Markowitz performance, with Sharpe ratios around 0.51. The results show that the
+method is reproducible and mathematically coherent, but the current
+fine-tuning reward overfits validation-period structure and does not yet provide
+robust test-period alpha.
+\end{abstract}
+
+\section{Introduction}
+
+Portfolio optimization depends on an estimate of the return distribution. The
+classical Markowitz problem estimates means and covariances from historical
+returns, then solves a mean-variance allocation problem \citep{markowitz1952}.
+This is simple and transparent, but the estimated mean vector is noisy and the
+resulting portfolio can become highly concentrated. Distributionally robust
+portfolio optimization partially addresses this problem by optimizing against a
+neighborhood of plausible distributions rather than a single empirical estimate
+\citep{blanchet2022}.
+
+Generative models offer a different route. Instead of estimating only moments,
+they can produce synthetic return scenarios and let the downstream optimizer
+solve a sample-average problem. Score-based diffusion models are a natural
+candidate because they define a continuous-time noising process and learn the
+reverse score needed for generation \citep{song2021}. Denoising diffusion models
+have been successful in high-dimensional generative modeling \citep{ho2020}, and
+the SDE formulation gives a direct link to stochastic control.
+
+Financial returns, however, are not just generic multivariate data. They exhibit
+stylized facts such as heavy tails, weak linear autocorrelation, volatility
+clustering, and unstable dependence \citep{cont2001}. A return generator can look
+reasonable under some marginal plots while still producing moments that imply
+poor portfolios. The central question in this project is therefore practical:
+can a diffusion model be made useful for portfolio decisions while preserving
+enough distributional realism to avoid pure reward hacking?
+
+The project evaluates three connected ideas. First, train a base
+variance-preserving SDE model on historical sector ETF returns. Second, calibrate
+generated scenarios with Gaussian optimal transport so that first and second
+moments match the training distribution. Third, fine-tune the reverse diffusion
+drift with a KL-penalized portfolio reward evaluated only on validation data. The
+KL penalty is meant to limit how far the controlled reverse process can move from
+the base model.
+
+The final results are materially different from the preliminary positive result.
+The production experiment evaluates both a base score model and an OT-augmented
+score model, and selects eta separately for each family. Validation Sharpe is
+very high, above 3.1 for the best candidates, but the selected fine-tuned
+fixed-scenario strategies lose money during the test period. That mismatch is
+the main empirical finding.
+
+\section{Data and Experimental Protocol}
+
+\subsection{Assets and Splits}
+
+The dataset contains daily log returns for ten S\&P 500 sector ETFs: XLK, XLF,
+XLE, XLV, XLI, XLY, XLP, XLU, XLB, and XLRE. The assets cover technology,
+financials, energy, health care, industrials, consumer discretionary, consumer
+staples, utilities, materials, and real estate. This universe is small enough for
+controlled experimentation but broad enough to produce nontrivial covariance and
+allocation structure.
+
+The experiment uses a strict chronological split:
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+Split & Date range & Trading days & Use \\
+\midrule
+Train & 2014-01-01 to 2020-12-31 & 1,317 & score model, scaler, OT target \\
+Validation & 2021-01-01 to 2021-12-31 & 252 & eta selection, reward evaluation \\
+Test & 2022-01-01 to 2024-12-31 & 756 & final performance evaluation \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The standardization scaler is fit only on training data. The experiment records
+the training range, validation range, test-use status, and scaler provenance for
+each model artifact. The final leakage audit reports a passing status, with zero
+failures and zero warnings.
+
+The chronological split is important because the test window contains a market
+environment that differs sharply from the training window. The training period
+includes the long post-crisis expansion, the 2018 volatility episode, and the
+COVID-19 shock. The validation year, 2021, is a strong recovery year for many
+risk assets. The test period includes the 2022 inflation and rate-hiking regime,
+the 2023 rebound, and the 2024 continuation of concentrated equity strength.
+This shift creates a difficult but useful evaluation setting. A model that
+optimizes too directly for the validation year can select a portfolio that looks
+excellent in 2021 but fails in the higher-rate regime that follows.
+
+The sector ETF universe also makes the estimation problem concrete. The assets
+are liquid, diversified within sector, and highly correlated during stress
+periods. Their return distributions are not independent, and the covariance
+matrix has economically meaningful structure. Technology and consumer
+discretionary often carry high growth exposure; utilities and consumer staples
+often provide more defensive exposure; energy has distinct commodity sensitivity.
+The optimizer must therefore decide not only between high and low volatility
+assets, but also between correlated factor exposures.
+
+\subsection{Backtest Design}
+
+The project compares equal-weight, rolling Markowitz, Wasserstein-robust
+Markowitz, base diffusion scenarios, Gaussian-OT diffusion scenarios, and
+fine-tuned diffusion scenarios. All reported test metrics use 2022 to 2024 data
+only. The final comparison stage loads the frozen eta selection before test
+evaluation and does not use test data for model selection.
+
+Two backtest modes are reported. In fixed-scenario mode, each diffusion strategy
+uses one scenario set throughout the test period. This isolates the scenario
+generator as a static model of the training distribution. In rolling mode, each
+monthly rebalance recalibrates scenarios to the trailing 252-day mean and
+covariance using Gaussian OT. That mode tests whether diffusion scenarios add
+anything after current rolling moments are imposed.
+
+The baseline set is designed to separate three effects. Equal weight measures the
+benefit of simple diversification without estimation. Rolling Markowitz measures
+the value and instability of plug-in moment estimation. Wasserstein-robust
+Markowitz measures whether shrinking toward a more conservative covariance
+estimate improves realized risk. The diffusion strategies measure whether
+scenario generation, moment calibration, and reward fine-tuning add incremental
+value beyond those classical baselines. Because all strategies are evaluated on
+the same daily return path, the comparison emphasizes allocation decisions rather
+than differences in data handling.
+
+\section{Diffusion Model}
+
+\subsection{Forward SDE}
+
+Let $X_0 \in \R^d$ denote a vector of standardized daily returns, with $d=10$.
+The forward variance-preserving SDE is
+\begin{equation}
+  dX_t = -\frac{1}{2}\beta(t)X_t\,dt + \sqrt{\beta(t)}\,dW_t,
+  \quad
+  \beta(t)=\beta_{\min}+t(\beta_{\max}-\beta_{\min}),
+\end{equation}
+with $\beta_{\min}=0.1$ and $\beta_{\max}=20.0$. The conditional marginal is
+\begin{equation}
+  X_t|X_0 \sim \calN(\alpha_t X_0,\sigma_t^2 I),
+  \quad
+  \alpha_t=\exp\left(-\frac{1}{2}\int_0^t\beta(s)\,ds\right),
+  \quad
+  \sigma_t^2=1-\alpha_t^2.
+\end{equation}
+
+The score network $s_\theta(x,t)$ estimates
+$\nabla_x \log p_t(x)$. Training minimizes denoising score matching:
+\begin{equation}
+  \mathcal{L}_{DSM}(\theta)
+  =
+  \E_{t,X_0,\epsilon}
+  \left[
+    \left\|
+      s_\theta(\alpha_t X_0+\sigma_t\epsilon,t)
+      + \epsilon/\sigma_t
+    \right\|_2^2
+  \right],
+  \quad
+  \epsilon \sim \calN(0,I).
+\end{equation}
+
+The network is a multilayer perceptron with hidden size 256, SiLU activations,
+and a sinusoidal time embedding of dimension 64. The production model trains for
+2,000 epochs with Adam at learning rate $10^{-3}$ \citep{kingma2015}. The final
+training loss is 0.1574.
+
+\subsection{Reverse Sampling}
+
+Scenarios are generated by Euler-Maruyama discretization of the reverse process.
+The production run uses 500 reverse steps and generates 10,000 base scenarios.
+The generated samples are transformed back to return units using the
+training-fitted scaler. The base scenario diagnostics record a
+Bures-Wasserstein distance of 0.0309 from the training distribution and an
+implied long-only MVO HHI near 1.0, meaning the raw generated moments induce an
+almost fully concentrated portfolio.
+
+This concentration problem is central. A generator can have acceptable
+correlation plots while still producing a slightly biased mean vector. In
+mean-variance optimization, small mean errors can dominate the allocation because
+the inverse covariance amplifies the direction of perceived excess return. The
+raw diffusion model underestimates volatility across assets and produces a
+portfolio that is effectively a single-asset bet. That is not only undesirable
+from a risk-management perspective; it is also evidence that distributional
+diagnostics must be tied to downstream decisions. A scenario model should be
+judged both by statistical realism and by the stability of the portfolio it
+implies.
+
+\subsection{Diagnostics Beyond Loss}
+
+Training loss alone is not sufficient for this application. The project evaluates
+generated scenarios along three dimensions. The first is marginal realism:
+per-asset means, standard deviations, kurtosis, and quantile plots should be
+close to the training returns. The second is cross-sectional realism: generated
+correlations and covariances should preserve the dependence structure among
+sectors. The third is decision realism: portfolios implied by generated
+scenarios should not be pathologically concentrated or unstable.
+
+These diagnostics reveal a clear pattern. The score model learns a reasonable
+cross-sectional shape but compresses marginal volatility and fat tails. This is
+common when a simple model is trained on limited financial data with a squared
+denoising objective. The loss rewards average denoising accuracy, while the
+tails are rare and carry less direct weight. For portfolio construction, this
+matters because underestimated volatility can make the optimizer too aggressive.
+Calibration is therefore not a cosmetic postprocessing step; it is required to
+make the generated scenarios usable in a mean-variance allocation.
+
+\section{Optimal Transport Calibration}
+
+Gaussian OT is used as a moment-correcting postprocessor. Let generated samples
+have mean and covariance $(\bmu_g,\bSigma_g)$, and let training returns have
+$(\bmu_t,\bSigma_t)$. Under a Gaussian approximation, the Bures-Wasserstein map
+from generated to target moments is affine:
+\begin{equation}
+  T(x)=\bmu_t + A(x-\bmu_g),
+\end{equation}
+where
+\begin{equation}
+  A = \bSigma_g^{-1/2}
+      \left(
+        \bSigma_g^{1/2}\bSigma_t\bSigma_g^{1/2}
+      \right)^{1/2}
+      \bSigma_g^{-1/2}.
+\end{equation}
+This construction follows the closed-form geometry of Gaussian optimal transport
+and the Bures-Wasserstein metric \citep{bures1969,bhatia2019,peyre2019}. It
+matches the first two moments exactly up to numerical error. It does not correct
+tail behavior, skewness, volatility clustering, or time dependence.
+
+This limitation is not a weakness of the implementation. It is a property of the
+chosen map. A Gaussian OT map treats the source and target distributions as if
+their relevant structure were fully summarized by mean and covariance. For a
+mean-variance optimizer, that is a reasonable first-order correction because the
+optimizer itself uses only those two moments. For a tail-risk optimizer, it would
+be insufficient. In that setting, a calibration method would need to preserve or
+reshape distributional features such as left-tail dependence and asymmetric
+drawdowns.
+
+The benefit of Gaussian OT is interpretability. If the calibrated scenarios
+perform differently from the raw scenarios, the source of the difference is
+clear: the first two moments have changed. This makes the fixed-scenario
+comparison easier to diagnose. Raw diffusion performance reflects the generator's
+uncontrolled moment bias. Gaussian-OT performance reflects a corrected
+mean-covariance input to the same portfolio optimizer. Fine-tuned performance
+then reflects a reward-conditioned change in scenario distribution.
+
+The diagnostics show that Gaussian OT reduces the training-distance diagnostic
+from 0.0309 to 0.00034 and reduces covariance Frobenius error from
+0.00141 to $1.75\times10^{-5}$. The raw generated marginal standard deviations
+are too low for every asset. For example, XLK has generated standard deviation
+0.00558 versus training standard deviation 0.01486. After Gaussian OT, the XLK
+standard deviation becomes 0.01476.
+
+\begin{table}[t]
+\centering
+\caption{Scenario calibration diagnostics from the production evaluation.}
+\label{tab:otdiag}
+\begin{tabular}{lccc}
+\toprule
+Scenario set & W2 diagnostic & Covariance error & Implied HHI \\
+\midrule
+Base generated & 0.0309 & 0.00141 & 1.000 \\
+Gaussian OT & 0.00034 & 0.000017 & 0.264 \\
+Sinkhorn subset & diagnostic only & diagnostic only & not used \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\textwidth]{figures/ot_gaussian_diagnostics.png}
+  \caption{Gaussian OT diagnostics. The calibration aligns first and second
+  moments to the training distribution, but it should not be interpreted as a
+  full correction of non-Gaussian financial structure.}
+  \label{fig:otdiag}
+\end{figure}
+
+\section{KL-Penalized Fine-Tuning}
+
+\subsection{Controlled Reverse Process}
+
+Fine-tuning adds a learnable drift perturbation $\bu_\phi(y,t)$ to the reverse
+SDE:
+\begin{equation}
+  dY_t =
+  \left[
+    -\frac{1}{2}\beta(t)Y_t
+    + \beta(t)s_\theta(Y_t,t)
+    + \bu_\phi(Y_t,t)
+  \right]dt
+  + \sqrt{\beta(t)}\,dW_t.
+\end{equation}
+The control network is a two-hidden-layer MLP with hidden size 128. Its output is
+bounded as $\tanh(\mathrm{MLP}(y,t))\cdot1.5$ to avoid extreme drifts.
+
+By Girsanov's theorem, the path-space KL divergence between the controlled and
+base reverse processes has a quadratic control-cost form \citep{oksendal2003}:
+\begin{equation}
+  \KL(P_\phi\|P_\theta)
+  =
+  \E_{P_\phi}
+  \left[
+    \int_0^T
+    \frac{\|\bu_\phi(Y_t,t)\|_2^2}{2\beta(t)}
+    dt
+  \right].
+\end{equation}
+The fine-tuning objective is
+\begin{equation}
+  \max_{\phi}
+  \E_{Y_0\sim P_\phi}[R(Y_0)]
+  -
+  \eta \KL(P_\phi\|P_\theta).
+\end{equation}
+Small $\eta$ permits larger drift changes. Large $\eta$ keeps the model closer
+to the base generator.
+
+\subsection{Portfolio Validation Reward}
+
+For generated scenario batch $Y_0$, the method computes batch moments
+$(\hat{\bmu},\hat{\bSigma})$ and a differentiable soft-Markowitz portfolio:
+\begin{equation}
+  \hat{\bpi}
+  =
+  \mathrm{softmax}\left((\hat{\bSigma}+10^{-4}I)^{-1}\hat{\bmu}\right).
+\end{equation}
+The softmax gives positive weights summing to one, but it is not the exact
+solution to the constrained Markowitz problem. Exact differentiable convex
+optimization layers would be a better future replacement \citep{agrawal2019}.
+
+The softmax approximation has two practical consequences. First, it guarantees
+long-only weights, which avoids short-sale leverage and keeps the allocation
+comparable to the baseline constraints. Second, it can exaggerate small
+differences in the unconstrained Markowitz direction. If one asset has a
+slightly larger estimated risk-adjusted return, the softmax can push most of the
+portfolio into that asset, especially when the covariance estimate is ill
+conditioned. The concentration penalty is included to counteract this effect,
+but the fixed-test results show that the penalty is not strong enough for the
+most aggressive selected model.
+
+The reward applies $\hat{\bpi}$ to fixed 2021 validation returns and combines
+annualized mean, annualized variance, empirical CVaR, and concentration:
+\begin{equation}
+  R(Y_0)
+  =
+  252\bar{r}_v
+  -
+  \frac{\lambda}{2}252\,\mathrm{Var}(r_v)
+  -
+  \gamma \mathrm{CVaR}_{95}(r_v)
+  -
+  \tau \sum_i \hat{\pi}_i^2,
+\end{equation}
+where $\lambda=5$, $\gamma=0.5$, and $\tau=0.1$. Gradients flow through
+$\hat{\bpi}$ to the generated scenario moments and back through the controlled
+reverse process. Test returns are never used in this stage.
+
+The reward is deliberately decision-aligned: generated scenarios are useful only
+if the portfolio they imply performs well on validation returns. This is more
+direct than matching stylized facts alone. It is also riskier. Validation returns
+are a single historical realization, not a population objective. If 2021 rewards
+a concentrated growth-oriented exposure, the fine-tuning step can learn to
+generate scenarios that justify that exposure, even if the resulting portfolio
+does not survive the next regime. The KL penalty limits the size of the drift
+perturbation, but it does not eliminate validation overfitting.
+
+\section{Eta Selection}
+
+The eta sweep evaluates $\eta\in\{0.05,0.1,0.5,1.0,5.0\}$ for both the base score
+model and the OT-augmented score model. Selection is based only on 2021
+validation Sharpe. The selection protocol explicitly records that test metrics
+are not available at selection time.
+
+\begin{table}[t]
+\centering
+\caption{Validation eta sweep. The selected eta is the highest validation Sharpe
+within each model family.}
+\label{tab:eta}
+\begin{tabular}{llcccc}
+\toprule
+Model & Eta & Val. Sharpe & Ann. return & Ann. vol. & HHI \\
+\midrule
+base & 0.05 & 3.136 & 46.04\% & 14.68\% & 0.982 \\
+base & 0.10 & 3.128 & 46.10\% & 14.74\% & 1.000 \\
+base & 0.50 & 2.921 & 41.49\% & 14.20\% & 0.447 \\
+base & 1.00 & 2.086 & 36.49\% & 17.49\% & 0.732 \\
+base & 5.00 & 1.805 & 34.74\% & 19.25\% & 1.000 \\
+\midrule
+OT-aug. & 0.05 & 3.224 & 44.08\% & 13.67\% & 0.714 \\
+OT-aug. & 0.10 & 3.139 & 48.74\% & 15.53\% & 0.532 \\
+OT-aug. & 0.50 & 2.042 & 34.97\% & 17.12\% & 0.684 \\
+OT-aug. & 1.00 & \textbf{3.234} & 41.65\% & 12.88\% & 0.520 \\
+OT-aug. & 5.00 & 2.071 & 34.16\% & 16.49\% & 0.587 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The selected models are OT-augmented eta 1.0 and base eta 0.05. Both selection
+scores are high, but both turn out to be poor fixed-scenario test portfolios.
+This gap is evidence that the reward and eta selection protocol can overfit a
+single validation year.
+
+The eta table also shows that validation Sharpe alone is not a sufficient model
+selection criterion. The base eta 0.05 and eta 0.10 models both reach validation
+Sharpe above 3.1, but their HHI values are essentially one. A selection rule that
+jointly constrained validation Sharpe, HHI, and sensitivity to small changes in
+the validation window would likely reject those models. The OT-augmented eta 1.0
+model is less concentrated, but its fixed-test return is still negative. This
+suggests that concentration is not the only failure mode. The validation reward
+can also select a sector tilt that is diversified but regime-specific.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.78\textwidth]{figures/eta_validation_frontier.png}
+  \caption{Validation frontier used for eta selection. Test data are not used in
+  this figure or in the eta-selection procedure.}
+  \label{fig:eta}
+\end{figure}
+
+\section{Fixed-Scenario Results}
+
+Table \ref{tab:fixed} reports the fixed-scenario test results. Equal weight earns
+5.59\% annually with Sharpe 0.363. Rolling Markowitz earns 9.03\% with Sharpe
+0.515, but it is concentrated with HHI 0.541 and high turnover. The
+Wasserstein-robust baseline is diversified and low turnover, but its Sharpe is
+only 0.380.
+
+Among diffusion strategies, the raw base scenarios produce annual return 11.48\%
+and Sharpe 0.454, but with annual volatility 25.31\%, maximum drawdown 33.13\%,
+and HHI 1.0. This is not a usable allocation profile. Gaussian OT lowers
+volatility and concentration, but also lowers return, producing Sharpe 0.393.
+The validation-selected fine-tuned models perform worst in fixed mode:
+OT-augmented eta 1.0 has Sharpe -0.059, and base eta 0.05 has Sharpe -0.221.
+
+\begin{table}[t]
+\centering
+\caption{Fixed-scenario backtest, 2022 to 2024. Sharpe confidence intervals use
+2,000 i.i.d. bootstrap draws.}
+\label{tab:fixed}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+Strategy & Ann. ret. & Ann. vol. & Sharpe & 95\% CI & Max DD & HHI \\
+\midrule
+Equal-Weight & 5.59\% & 15.41\% & 0.363 & $[-0.76,1.46]$ & -18.41\% & 0.100 \\
+Markowitz & 9.03\% & 17.54\% & 0.515 & $[-0.60,1.57]$ & -17.09\% & 0.541 \\
+Wasserstein-Robust & 5.75\% & 15.12\% & 0.380 & $[-0.74,1.48]$ & -17.92\% & 0.103 \\
+Diffusion-Base & 11.48\% & 25.31\% & 0.454 & $[-0.66,1.55]$ & -33.13\% & 1.000 \\
+Diffusion+GaussOT & 6.50\% & 16.56\% & 0.393 & $[-0.69,1.50]$ & -22.97\% & 0.264 \\
+Diffusion+FT, OT-aug. eta 1.0 & -1.08\% & 18.35\% & -0.059 & $[-1.18,1.06]$ & -28.82\% & 0.520 \\
+Diffusion+FT, base eta 0.05 & -4.63\% & 20.93\% & -0.221 & $[-1.37,0.88]$ & -33.20\% & 0.982 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/final_comparison_fixed.png}
+  \caption{Fixed-scenario test comparison. The fine-tuned strategies selected
+  by validation Sharpe do not generalize in fixed-scenario mode.}
+  \label{fig:fixed}
+\end{figure}
+
+The confidence intervals are wide. That is expected with about 756 daily test
+observations, especially when returns are non-Gaussian and serial dependence is
+possible. The simple bootstrap is useful as a warning against overclaiming, but a
+stationary or block bootstrap would be more appropriate for dependent financial
+returns \citep{politis1994}. No pairwise Sharpe difference should be treated as
+statistically decisive.
+
+The fixed-scenario results are still informative. They show that the base
+diffusion model contains enough signal to generate a high-return allocation, but
+not enough calibration to control risk. They also show that first-two-moment
+calibration improves risk characteristics but does not create superior realized
+performance. Most importantly, they show that validation reward optimization can
+move the model in the wrong direction. This is the central empirical warning:
+decision-aligned fine-tuning is powerful enough to change the portfolio, but the
+current validation design is not strong enough to guarantee that the change is
+robust.
+
+\section{Rolling Results}
+
+Table \ref{tab:rolling} reports the rolling-diffusion test results. Once
+generated scenarios are recalibrated to the trailing 252-day historical moments,
+all diffusion variants produce nearly the same performance as rolling Markowitz.
+Diffusion-Base obtains Sharpe 0.5105, Diffusion+GaussOT obtains 0.5096, the
+OT-augmented fine-tuned model obtains 0.5101, and the base fine-tuned model
+obtains 0.5106. These values are economically indistinguishable from rolling
+Markowitz at 0.5151.
+
+\begin{table}[t]
+\centering
+\caption{Rolling-diffusion backtest, 2022 to 2024. Scenarios are recalibrated
+to trailing 252-day moments at each rebalance using only past data.}
+\label{tab:rolling}
+\begin{tabular}{lccccc}
+\toprule
+Strategy & Ann. ret. & Ann. vol. & Sharpe & Max DD & Turnover \\
+\midrule
+Equal-Weight & 5.59\% & 15.41\% & 0.363 & -18.41\% & 0.000 \\
+Markowitz & 9.03\% & 17.54\% & 0.515 & -17.09\% & 0.617 \\
+Wasserstein-Robust & 5.75\% & 15.12\% & 0.380 & -17.92\% & 0.040 \\
+Diffusion-Base & 8.90\% & 17.44\% & 0.511 & -17.10\% & 0.588 \\
+Diffusion+GaussOT & 8.87\% & 17.40\% & 0.510 & -17.09\% & 0.586 \\
+Diffusion+FT, OT-aug. eta 1.0 & 8.88\% & 17.41\% & 0.510 & -17.09\% & 0.585 \\
+Diffusion+FT, base eta 0.05 & 8.90\% & 17.43\% & 0.511 & -17.10\% & 0.588 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/final_comparison_rolling.png}
+  \caption{Rolling-diffusion test comparison. Moment recalibration makes
+  diffusion strategies behave almost like rolling Markowitz.}
+  \label{fig:rolling}
+\end{figure}
+
+This collapse has a clear explanation. Mean-variance optimization depends only
+on the estimated mean and covariance. Rolling Gaussian OT forces the scenario set
+to match the same trailing moments that rolling Markowitz already uses. Unless
+the portfolio objective uses higher-order scenario information, or the generator
+contributes predictive structure beyond trailing moments, the rolling diffusion
+strategy has little room to differ.
+
+This result should not be read as a failure of diffusion modeling in general. It
+is a consequence of pairing a moment-matched scenario generator with a
+mean-variance optimizer. Once the rolling calibration step imposes the current
+mean and covariance, the remaining higher-order differences in the scenario set
+are mostly invisible to the optimizer. A different downstream objective could
+use those differences. For example, a CVaR optimizer would depend on the lower
+tail of the generated distribution. A drawdown-aware objective would depend on
+path structure. A regime-conditioned optimizer could use the generator to
+forecast state-dependent covariance rather than simply reproduce trailing
+moments.
+
+\section{Interpretation}
+
+\subsection{What Worked}
+
+The pipeline is reproducible and properly separated by time. The audit passed.
+The score model generated finite scenarios with recorded provenance. Gaussian OT
+did exactly what it was supposed to do: it aligned first and second moments and
+reduced concentration relative to raw generated scenarios. The rolling test also
+behaved consistently with the mathematics of the pipeline.
+
+The project also demonstrates a useful engineering structure. Every stage is
+automated, including data preparation, leakage audit, score training, sampling,
+OT calibration, eta sweep, comparison, and report asset generation. This makes
+the experiment repeatable without changing the modeling protocol between runs.
+
+\subsection{What Did Not Work}
+
+The fine-tuning reward did not generalize. Validation Sharpe selected highly
+aggressive portfolios. The base eta 0.05 model has validation Sharpe 3.136 and
+HHI 0.982, then loses 4.63\% annually in fixed test with HHI 0.982. That is a
+classic sign of validation-period overfitting and excessive concentration. The
+OT-augmented eta 1.0 model is less concentrated, but it still has negative
+fixed-test return.
+
+The base generator also underestimates marginal volatility and fat tails before
+OT calibration. The generated kurtosis values in the diagnostics are near zero,
+while training-return kurtosis is high across assets. Gaussian OT fixes
+volatility but cannot fix this tail mismatch. As a result, the scenario
+distribution is moment-aligned but not fully realistic.
+
+\subsection{Why the Earlier Positive Claim Changed}
+
+The prior draft stated that fine-tuning achieved Sharpe 0.70 in fixed mode. The
+final metrics do not support that statement. The updated selection protocol
+evaluates both base and OT-augmented model families and chooses different etas.
+Under those frozen selections, fixed-test fine-tuning underperforms. The report
+therefore treats the final production evaluation as authoritative.
+
+\section{Limitations}
+
+The first limitation is model expressiveness. A plain MLP score network on
+one-day return vectors does not model temporal dynamics directly. It sees the
+cross-section of daily returns, not a sequence of market states. That makes it
+difficult to capture volatility clustering and regime dependence, both of which
+matter in financial data.
+
+The second limitation is the reward. The soft-Markowitz reward is differentiable,
+but it can produce highly concentrated portfolios when the generated moment
+estimates are noisy. It optimizes validation-year performance rather than a
+more stable distributional objective. Stronger concentration controls,
+turnover-aware rewards, and nested cross-validation across multiple validation
+regimes would make eta selection more reliable.
+
+The third limitation is the calibration layer. Gaussian OT is useful and
+transparent, but it reduces scenario calibration to moment matching. If the
+downstream optimizer is mean-variance, then moment matching may be enough. If
+the project goal is to exploit higher-order scenario structure, the optimizer
+must use tail or path-dependent objectives, and the generator must be evaluated
+on those properties.
+
+The fourth limitation is statistical power. A three-year test window is small
+for Sharpe-ratio inference. The confidence intervals in Tables \ref{tab:fixed}
+and \ref{tab:rolling} are wide even under a simple i.i.d. bootstrap. A longer
+history, walk-forward validation, and block bootstrap inference are needed before
+making strong performance claims.
+
+The fifth limitation is the objective mismatch between training diagnostics and
+final use. The score model is trained to estimate a denoising score, the OT map
+is evaluated by moment alignment, the fine-tuning step is evaluated by
+validation Sharpe, and the final report evaluates realized test performance.
+Each stage is reasonable in isolation, but the objectives are not identical.
+Future work should reduce this mismatch by defining a single decision-aware
+evaluation protocol that is used consistently for model selection and final
+assessment.
+
+\section{Future Work}
+
+The most important next step is to replace single-year eta selection with a
+walk-forward validation design. For example, train on 2014 to 2018, validate on
+2019, train on 2014 to 2019, validate on 2020, then reserve 2021 for final
+model selection before testing on 2022 to 2024. This would reduce dependence on
+one unusually favorable validation year.
+
+The second improvement is to use a differentiable convex optimization layer for
+the portfolio decision. That would align the training reward with the exact
+long-only constrained optimizer used in evaluation, rather than relying on a
+softmax approximation.
+
+The third improvement is to condition the diffusion model on market state. A
+regime-conditioned score model could generate scenarios conditional on realized
+volatility, trend, rates, or macro indicators. That would give the rolling
+strategy a way to differ from simple trailing-moment Markowitz.
+
+The fourth improvement is to evaluate objectives that actually use scenario
+tails. If the downstream portfolio remains mean-variance, the generator is judged
+mostly through means and covariances. CVaR optimization, drawdown-aware
+objectives, or utility functions with downside asymmetry would better test
+whether diffusion scenarios add value beyond moment estimation.
+
+\section{Conclusion}
+
+The latest production run supports a sober conclusion. The project successfully
+builds a controlled, reproducible pipeline for diffusion-based portfolio
+scenarios with strict data separation, Gaussian OT calibration, and
+KL-penalized reward fine-tuning. The mathematical method is sound and the
+calibration diagnostics behave as expected. The leakage audit passes cleanly.
+
+The empirical result is mixed. Base diffusion scenarios have high fixed-test
+return but unacceptable concentration and drawdown. Gaussian OT improves moment
+alignment and concentration, but it does not beat rolling Markowitz. The
+validation-selected fine-tuned models do not generalize in fixed-scenario mode.
+In rolling mode, Gaussian moment recalibration causes diffusion strategies to
+converge to rolling Markowitz performance.
+
+The main lesson is that reward-conditioned diffusion for portfolios is promising
+as a framework, but the current implementation is not yet a robust trading
+method. The next version should focus on stronger validation, exact
+differentiable portfolio optimization, regime conditioning, and tail-aware
+objectives.
+
+\clearpage
+\section*{References}
+
+\begin{thebibliography}{99}
+
+\bibitem[Agrawal et al.(2019)]{agrawal2019}
+Agrawal, A., Amos, B., Barratt, S., Boyd, S., Diamond, S., and Kolter, J. Z.
+(2019).
+\newblock Differentiable convex optimization layers.
+\newblock \emph{Advances in Neural Information Processing Systems}, 32.
+\newblock \url{https://papers.neurips.cc/paper/9152-differentiable-convex-optimization-layers}.
+
+\bibitem[Anderson(1982)]{anderson1982}
+Anderson, B. D. O. (1982).
+\newblock Reverse-time diffusion equation models.
+\newblock \emph{Stochastic Processes and Their Applications}, 12(3):313--326.
+
+\bibitem[Bhatia et al.(2019)]{bhatia2019}
+Bhatia, R., Jain, T., and Lim, Y. (2019).
+\newblock On the Bures-Wasserstein distance between positive definite matrices.
+\newblock \emph{Expositiones Mathematicae}, 37(2):165--191.
+\newblock \url{https://arxiv.org/abs/1712.01504}.
+
+\bibitem[Blanchet et al.(2022)]{blanchet2022}
+Blanchet, J., Chen, L., and Zhou, X. Y. (2022).
+\newblock Distributionally robust mean-variance portfolio selection with
+Wasserstein distances.
+\newblock \emph{Management Science}, 68(9):6382--6410.
+\newblock \url{https://pubsonline.informs.org/doi/abs/10.1287/mnsc.2021.4155}.
+
+\bibitem[Bures(1969)]{bures1969}
+Bures, D. (1969).
+\newblock An extension of Kakutani's theorem on infinite product measures to the
+tensor product of semifinite $W^*$-algebras.
+\newblock \emph{Transactions of the American Mathematical Society}, 135:199--212.
+
+\bibitem[Cont(2001)]{cont2001}
+Cont, R. (2001).
+\newblock Empirical properties of asset returns: Stylized facts and statistical
+issues.
+\newblock \emph{Quantitative Finance}, 1(2):223--236.
+\newblock \url{https://www.tandfonline.com/doi/abs/10.1080/713665670}.
+
+\bibitem[Ho et al.(2020)]{ho2020}
+Ho, J., Jain, A., and Abbeel, P. (2020).
+\newblock Denoising diffusion probabilistic models.
+\newblock \emph{Advances in Neural Information Processing Systems}, 33:6840--6851.
+\newblock \url{https://proceedings.neurips.cc/paper/2020/hash/4c5bcfec8584af0d967f1ab10179ca4b-Abstract.html}.
+
+\bibitem[Kingma and Ba(2015)]{kingma2015}
+Kingma, D. P. and Ba, J. (2015).
+\newblock Adam: A method for stochastic optimization.
+\newblock \emph{International Conference on Learning Representations}.
+
+\bibitem[Markowitz(1952)]{markowitz1952}
+Markowitz, H. (1952).
+\newblock Portfolio selection.
+\newblock \emph{The Journal of Finance}, 7(1):77--91.
+
+\bibitem[Oksendal(2003)]{oksendal2003}
+Oksendal, B. (2003).
+\newblock \emph{Stochastic Differential Equations: An Introduction with
+Applications}.
+\newblock Springer, 6th edition.
+
+\bibitem[Peyre and Cuturi(2019)]{peyre2019}
+Peyre, G. and Cuturi, M. (2019).
+\newblock Computational optimal transport.
+\newblock \emph{Foundations and Trends in Machine Learning}, 11(5--6):355--607.
+\newblock \url{https://arxiv.org/abs/1803.00567}.
+
+\bibitem[Politis and Romano(1994)]{politis1994}
+Politis, D. N. and Romano, J. P. (1994).
+\newblock The stationary bootstrap.
+\newblock \emph{Journal of the American Statistical Association}, 89(428):1303--1313.
+\newblock \url{https://www.tandfonline.com/doi/abs/10.1080/01621459.1994.10476870}.
+
+\bibitem[Song et al.(2021)]{song2021}
+Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Ermon, S., and Poole, B.
+(2021).
+\newblock Score-based generative modeling through stochastic differential
+equations.
+\newblock \emph{International Conference on Learning Representations}.
+\newblock \url{https://research.google/pubs/score-based-generative-modeling-through-stochastic-differential-equations/}.
+
+\end{thebibliography}
+
+\end{document}

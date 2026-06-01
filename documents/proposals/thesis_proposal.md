@@ -10,7 +10,7 @@
 
 ## Abstract
 
-We propose a framework for fine-tuning a score-based diffusion model's reverse stochastic differential equation (SDE) drift under a portfolio-utility reward, using the KL-penalized stochastic control theory developed in this course. The key observation is that existing work treats the diffusion model as a frozen scenario generator with no feedback from the downstream portfolio objective; and the stochastic control theory for reward fine-tuning of diffusion models (Han, Razaviyayn & Xu, ICML 2025) has not yet been applied to financial decision-making. We bridge these two threads, derive the HJB optimality condition for the fine-tuning problem, introduce optimal transport (OT) calibration as a distributional correction step, and evaluate the full pipeline empirically on S&P 500 sector ETF data. The empirical goal is deliberately framed as exploratory: to characterize the trade-off between realism, reward-seeking, and portfolio performance, rather than to claim statistically significant outperformance from a short test window.
+We propose a framework for fine-tuning a score-based diffusion model's reverse stochastic differential equation (SDE) drift under a portfolio-utility reward, using KL-penalized stochastic control. The key observation is that existing work treats the diffusion model as a frozen scenario generator with no feedback from the downstream portfolio objective; and the stochastic control theory for reward fine-tuning of diffusion models (Han, Razaviyayn & Xu, ICML 2025) has not yet been applied to financial decision-making. We bridge these two threads, derive the HJB optimality condition for the fine-tuning problem, introduce optimal transport (OT) calibration as a distributional correction step, and evaluate the full pipeline empirically on S&P 500 sector ETF data. The empirical goal is deliberately framed as exploratory: to characterize the trade-off between realism, reward-seeking, and portfolio performance, rather than to claim statistically significant outperformance from a short test window.
 
 ---
 
@@ -40,7 +40,7 @@ We model the joint daily log-return vector $X_0 \in \mathbb{R}^d$ under the vari
 
 $$dX_t = -\tfrac{\beta(t)}{2}\, X_t\, dt + \sqrt{\beta(t)}\, dW_t, \qquad \beta(t) = \beta_{\min} + t(\beta_{\max} - \beta_{\min})$$
 
-with marginal $X_t \mid X_0 \sim \mathcal{N}(\alpha_t X_0,\, \sigma_t^2 I)$ where $\alpha_t = \exp(-\tfrac{1}{2}\int_0^t \beta)$, $\sigma_t^2 = 1-\alpha_t^2$. A score network $s_\theta$ is trained via denoising score matching. By the time-reversal theorem (Lecture 2-3), generating a scenario reduces to integrating the reverse SDE:
+with marginal $X_t \mid X_0 \sim \mathcal{N}(\alpha_t X_0,\, \sigma_t^2 I)$ where $\alpha_t = \exp(-\tfrac{1}{2}\int_0^t \beta)$, $\sigma_t^2 = 1-\alpha_t^2$. A score network $s_\theta$ is trained via denoising score matching. By the time-reversal theorem, generating a scenario reduces to integrating the reverse SDE:
 
 $$dY_t = \bigl[-\tfrac{\beta(T{-}t)}{2}\,Y_t + \beta(T{-}t)\,s_\theta(Y_t,T{-}t)\bigr]dt + \sqrt{\beta(T{-}t)}\,d\tilde{W}_t, \qquad Y_0 \sim \mathcal{N}(0,I)$$
 
@@ -64,11 +64,11 @@ where $U(Y_T)$ is a terminal portfolio reward, and the controlled reverse SDE is
 
 $$dY_t = \bigl[-\tfrac{\beta}{2}Y_t + \beta\,s_\theta(Y_t,t) + u_\phi(Y_t,t)\bigr]dt + \sqrt{\beta}\,d\tilde{W}_t$$
 
-By Girsanov's theorem (Lecture 7), the KL penalty equals the quadratic control cost:
+By Girsanov's theorem, the KL penalty equals the quadratic control cost:
 
 $$\mathrm{KL}(p_\phi \,\|\, p_\theta) = \mathbb{E}\!\left[\int_0^T \frac{\|u_\phi(Y_t,t)\|^2}{2\,\beta(T-t)}\,dt\right]$$
 
-This is precisely the entropy-regularised stochastic control structure from Lecture 7, §7.1–7.2. Substituting the KL expression, problem $(\star)$ becomes:
+This is an entropy-regularised stochastic control problem. Substituting the KL expression, problem $(\star)$ becomes:
 $$\max_u \mathbb{E}\!\left[U(Y_T) - \eta\int_0^T \frac{\|u_t\|^2}{2\beta(T{-}t)}\,dt\right]$$
 The running cost is $-\tfrac{\eta}{2\beta}\|u\|^2$. The Hamiltonian maximization $\sup_u\!\bigl\{u\cdot\nabla_y V - \tfrac{\eta}{2\beta}\|u\|^2\bigr\}$ yields first-order condition $\nabla_y V = \tfrac{\eta}{\beta} u$, so:
 $$u^*(t,y) = \frac{\beta(T{-}t)}{\eta}\,\nabla_y V(t,y)$$
@@ -76,7 +76,7 @@ Substituting back, the supremum equals $\tfrac{\beta(T-t)}{2\eta}\|\nabla_y V\|^
 
 $$\partial_t V + \mathcal{L}^{s_\theta}V + \frac{\beta(T{-}t)}{2\eta}\|\nabla_y V\|^2 = 0, \qquad V(T,y) = U(y) \tag{HJB}$$
 
-The scalar $\eta$ is the **distributional budget**: small $\eta$ makes the running cost cheap, so $u^*$ can be large (aggressive reward-seeking); large $\eta$ makes $u^*$ small, keeping $p_\phi$ close to $p_\theta$ (realism-preserving). This is the continuous-time analogue of RLHF described in Lecture 13 — the pre-trained diffusion model plays the role of the reference policy and the portfolio utility plays the role of the reward model.
+The scalar $\eta$ is the **distributional budget**: small $\eta$ makes the running cost cheap, so $u^*$ can be large (aggressive reward-seeking); large $\eta$ makes $u^*$ small, keeping $p_\phi$ close to $p_\theta$ (realism-preserving). This is the continuous-time analogue of reference-policy reward fine-tuning: the pre-trained diffusion model plays the role of the reference policy and the portfolio utility plays the role of the reward model.
 
 The preliminary implementation used the quadratic proxy
 $$U_{\text{quad}}(r)=\frac{1}{2\lambda}r^\top\Sigma^{-1}r,$$
@@ -148,20 +148,20 @@ The main preliminary interpretation is therefore cautious: (1) the base diffusio
 
 ---
 
-## 5. Course Connections
+## 5. Technical Ingredients
 
-The project uses material from all three parts of the course:
+The project uses three technical ingredients:
 
-| Course content | Role in project |
+| Technical ingredient | Role in project |
 |---|---|
-| Fokker-Planck equation (Lec 2) | Governs density evolution under VP-SDE |
-| Time-reversal theorem (Lec 2-3) | Reverse SDE for scenario generation |
-| Denoising score matching (Lec 2-3) | Score network training objective |
-| Tweedie's formula (Lec 2-3) | Denoised return estimate $\mathbb{E}[X_0\mid X_t]$ |
-| HJB equation (Lec 7) | Optimality condition for fine-tuned control $u^*$ |
-| Entropy-regularised HJB (Lec 7, §7.1–7.2) | Exact structure of problem $(\star)$ |
-| Girsanov / KL as quadratic cost (Lec 7–8) | KL = $\mathbb{E}[\int \|u\|^2/2\beta\,dt]$ |
-| RLHF as stochastic control (Lec 13) | Fine-tuning formulation and policy iteration |
+| Fokker-Planck equation | Governs density evolution under VP-SDE |
+| Time-reversal theorem | Reverse SDE for scenario generation |
+| Denoising score matching | Score network training objective |
+| Tweedie's formula | Denoised return estimate $\mathbb{E}[X_0\mid X_t]$ |
+| HJB equation | Optimality condition for fine-tuned control $u^*$ |
+| Entropy-regularised HJB | Exact structure of problem $(\star)$ |
+| Girsanov / KL as quadratic cost | KL = $\mathbb{E}[\int \|u\|^2/2\beta\,dt]$ |
+| Reference-policy reward fine-tuning | Fine-tuning formulation and policy iteration |
 
 ---
 
@@ -186,5 +186,5 @@ The project uses material from all three parts of the course:
 4. Gao, Zha & Zhou. "Data-driven generative simulation of SDEs using diffusion models." 2025. arXiv:2509.08731
 5. Blanchet, Chen & Zhou. "Distributionally Robust Mean-Variance Portfolio Selection with Wasserstein Distances." *Management Science* 68(9), 2022.
 6. Jia & Zhou. "Policy Evaluation and Temporal-Difference Learning in Continuous Time and Space." *JMLR* 23(154), 2022.
-7. Tang & Zhao. "Score-based diffusion models via stochastic differential equations." *Statistic Surveys* 19, 2025. *(course text)*
-8. Pham. *Continuous-time stochastic control and optimization with financial applications.* Springer, 2009. *(course text)*
+7. Tang & Zhao. "Score-based diffusion models via stochastic differential equations." *Statistic Surveys* 19, 2025.
+8. Pham. *Continuous-time stochastic control and optimization with financial applications.* Springer, 2009.

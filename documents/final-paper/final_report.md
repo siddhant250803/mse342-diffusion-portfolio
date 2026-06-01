@@ -21,13 +21,13 @@ Generative models of financial return distributions offer a principled alternati
 
 Score-based diffusion models have become the dominant class of high-dimensional generative models following the work of Ho et al. (2020) and Song et al. (2021). Their application to financial data is growing: recent work demonstrates that denoising score matching on return panels can partially recover stylized facts including excess kurtosis and cross-sectional correlation structure (Pelger & Zou, 2023; De Bortoli et al., 2021). However, a distributionally realistic generator is not automatically a useful one for portfolio construction: the score model may generate return moments that differ from historical moments in ways that systematically bias Markowitz weights, producing portfolios that are too concentrated, too volatile, or poorly calibrated to tail risk.
 
-Two complementary tools address this gap. First, optimal transport (OT) calibration can align generated moments to historical moments post-hoc. The Gaussian Bures-Wasserstein map provides a closed-form linear correction that matches means and covariances under a Gaussian approximation (Bures, 1969; Wasserstein, 1969). Second, stochastic control fine-tuning can directly reshape the generative model to produce scenarios that improve a downstream portfolio objective. This second approach is grounded in the KL-penalized stochastic optimal control problem studied extensively in the course, connecting to the policy gradient and control-as-inference literature (Levine, 2018; Han et al., 2025).
+Two complementary tools address this gap. First, optimal transport (OT) calibration can align generated moments to historical moments post-hoc. The Gaussian Bures-Wasserstein map provides a closed-form linear correction that matches means and covariances under a Gaussian approximation (Bures, 1969; Wasserstein, 1969). Second, stochastic control fine-tuning can directly reshape the generative model to produce scenarios that improve a downstream portfolio objective. This second approach is grounded in KL-penalized stochastic optimal control and connects to the policy gradient and control-as-inference literature (Levine, 2018; Han et al., 2025).
 
 The tension at the heart of this project is the trade-off between realism (staying close to the base generative model in KL sense) and performance (biasing scenarios toward high-utility portfolio outcomes). The KL penalty parameter eta parameterizes this trade-off: small eta allows large drift perturbations at the cost of distributional fidelity; large eta forces the fine-tuned model to remain close to the base generator.
 
 This paper makes the following contributions:
 
-1. A reproducible end-to-end pipeline with strict three-way data splits (2014-2020 train, 2021 validation, 2022-2024 test) and a formal leakage audit script.
+1. A reproducible end-to-end pipeline with strict three-way data splits (2014-2020 train, 2021 validation, 2022-2024 test) and a formal leakage audit that verifies test data are not used in training, calibration, or model selection.
 2. A decision-aligned portfolio reward using validation returns for gradient signal, replacing the quadratic proxy reward that is standard in preliminary implementations.
 3. Honest separation of Gaussian OT (first-two-moments calibration under Gaussian approximation) from Sinkhorn OT (subset-only diagnostic), addressing overstatement of OT calibration scope in prior versions.
 4. Bootstrap confidence intervals that honestly reflect the limited statistical power of a three-year test window.
@@ -48,7 +48,7 @@ Blanchet et al. (2022) develop a tractable reformulation of the Wasserstein-ball
 
 ### 2.3 KL-Penalized Stochastic Control
 
-The fine-tuning objective in this paper follows the KL-penalized policy optimization framework studied in the reinforcement learning literature (Schulman et al., 2015; Ziegler et al., 2019). In the continuous-time SDE setting, Girsanov's theorem gives an explicit quadratic form for the KL cost between two path measures related by a drift perturbation (Oksendal, 2003). Han et al. (2025) apply this framework specifically to fine-tuning diffusion models under arbitrary reward functions, which is the direct methodological basis for this project. The course lectures (MS&E 342, Lectures 12-13) provide the mathematical foundation connecting the HJB equation to the Girsanov-cost stochastic control problem.
+The fine-tuning objective in this paper follows the KL-penalized policy optimization framework studied in the reinforcement learning literature (Schulman et al., 2015; Ziegler et al., 2019). In the continuous-time SDE setting, Girsanov's theorem gives an explicit quadratic form for the KL cost between two path measures related by a drift perturbation (Oksendal, 2003). Han et al. (2025) apply this framework specifically to fine-tuning diffusion models under arbitrary reward functions, which is the direct methodological basis for this project.
 
 ### 2.4 Optimal Transport for Distribution Calibration
 
@@ -154,11 +154,11 @@ We use daily log-returns for ten S&P 500 sector ETFs (XLK, XLF, XLE, XLV, XLI, X
 - **Validation** (2021-01-01 to 2021-12-31): 252 trading days. Used exclusively for eta selection and portfolio reward evaluation during fine-tuning.
 - **Test** (2022-01-01 to 2024-12-31): 756 trading days. Evaluated exactly once after all model and hyperparameter choices are frozen.
 
-A standardization scaler (per-asset mean and standard deviation) is computed on training data only and saved with every model checkpoint. No validation or test returns enter scaler computation at any stage.
+A standardization scaler (per-asset mean and standard deviation) is computed on training data only. No validation or test returns enter scaler computation at any stage.
 
 ### 4.2 Score Model Architecture and Training
 
-The score network s_theta is a three-hidden-layer MLP with SiLU activations and sinusoidal time embedding. Architecture: hidden size 256, time embedding dimension 64, input dimension 10 (number of assets). Training: Adam optimizer (Kingma & Ba, 2015) with learning rate 1e-3, cosine annealing decay (Loshchilov & Hutter, 2017) over 2,000 epochs, batch size 256, seed 42. The full-run checkpoint is saved as score_model_base.pt with associated JSON metadata recording the training split and scaler provenance.
+The score network s_theta is a three-hidden-layer MLP with SiLU activations and sinusoidal time embedding. Architecture: hidden size 256, time embedding dimension 64, input dimension 10 (number of assets). Training: Adam optimizer (Kingma & Ba, 2015) with learning rate 1e-3, cosine annealing decay (Loshchilov & Hutter, 2017) over 2,000 epochs, batch size 256, seed 42.
 
 ### 4.3 Scenario Generation
 
@@ -197,7 +197,7 @@ Eta candidates are evaluated over {0.05, 0.1, 0.5, 1.0, 5.0}. For each candidate
 3. Compute long-only MVO weights from scenarios.
 4. Evaluate validation Sharpe of those weights applied to 2021 returns.
 
-The selected eta* = argmax validation Sharpe. Results saved in results/eta_selected.csv, which explicitly records "NOT AVAILABLE" for test metrics and "validation_sharpe" as the selection_metric field. This file is checked by the leakage audit.
+The selected eta* = argmax validation Sharpe. No 2022-2024 test-period metric is computed or inspected during selection. The leakage audit checks this condition before final test metrics are reported.
 
 ### 4.6 Portfolio Strategies and Backtesting
 
@@ -293,7 +293,7 @@ The fixed-scenario setting, by contrast, allows the score model's structural kno
 
 ### 5.5 Sinkhorn OT Diagnostic
 
-Applied to a 500-sample subset, Sinkhorn OT (regularization epsilon = 0.005) reduces the Bures-Wasserstein distance from 0.030 to 0.020. The reduction is smaller than full Gaussian OT because the subset is small relative to the dimensionality of the problem. Full-set Sinkhorn would require extending the barycentric map to out-of-sample points via nearest-neighbor or kernel smoothing; this extension is not implemented. Sinkhorn results are reported as diagnostics only and Sinkhorn is not included as a portfolio strategy. This addresses the methodological error in earlier versions of the code that stored Gaussian OT scenarios under the Sinkhorn label.
+Applied to a 500-sample subset, Sinkhorn OT (regularization epsilon = 0.005) reduces the Bures-Wasserstein distance from 0.030 to 0.020. The reduction is smaller than full Gaussian OT because the subset is small relative to the dimensionality of the problem. Full-set Sinkhorn would require extending the barycentric map to out-of-sample points via nearest-neighbor or kernel smoothing; this extension is not implemented. Sinkhorn results are reported as diagnostics only and Sinkhorn is not included as a portfolio strategy. This addresses a labeling issue in earlier drafts where Gaussian OT and Sinkhorn OT were not clearly separated.
 
 ---
 
@@ -405,4 +405,4 @@ Ziegler, D. M., Stiennon, N., Wu, J., Brown, T. B., Radford, A., Amodei, D., Chr
 
 ---
 
-*Reproducibility note: All code, data splits, and model checkpoints are fully reproducible using the master pipeline runner at run_project.py. The fast smoke test (all stages, reduced epochs/samples) completes in under 30 minutes on Apple Silicon hardware and passes the leakage audit with zero failures. Full production run uses 2,000 training epochs and 10,000 scenarios. Config: configs/default.yaml. Seeds are fixed at 42 for data and model training, 0 for fine-tuning.*
+*Reproducibility note: The full workflow is reproducible from data splitting through final evaluation. A reduced smoke-test setting completes in under 30 minutes on Apple Silicon hardware and passes the leakage audit with zero failures. The production run uses 2,000 training epochs and 10,000 scenarios. Seeds are fixed at 42 for data and model training, and 0 for fine-tuning.*
