@@ -11,6 +11,10 @@ Spring Quarter 2026
 
 We investigate whether a score-based diffusion model for financial return scenarios can be fine-tuned through KL-penalized stochastic control such that generated scenarios remain distributionally realistic while becoming more useful for downstream portfolio optimization. We train a variance-preserving stochastic differential equation (VP-SDE) score model on ten S&P 500 sector ETF daily log-returns from 2014 to 2020, apply Gaussian Bures-Wasserstein optimal transport calibration to align first-order moments, and fine-tune the reverse diffusion drift with a decision-aligned portfolio reward evaluated on 2021 validation data. The fine-tuning objective balances expected portfolio utility against a Girsanov KL divergence penalty, with the regularization strength (eta) selected exclusively on validation data to prevent test-period leakage. In the fixed-scenario backtest over 2022 to 2024, the fine-tuned strategy achieves a Sharpe ratio of 0.70 compared to 0.515 for rolling plug-in Markowitz and 0.363 for equal-weight, with a reduced maximum drawdown of 14.88%. Ninety-five percent bootstrap confidence intervals span approximately 2.1 Sharpe units over the three-year test window, reflecting limited statistical power. Results are presented as exploratory evidence of a realism-performance frontier rather than as statistically decisive claims of outperformance. Code and data splits are fully reproducible via a single command.
 
+<div style="border: 1px solid #111; padding: 12px; text-align: center; margin: 16px 0;">
+<strong>Code:</strong> <a href="https://github.com/siddhant250803/mse342-diffusion-portfolio">github.com/siddhant250803/mse342-diffusion-portfolio</a>
+</div>
+
 **Keywords:** score-based diffusion models, stochastic optimal control, KL divergence, optimal transport, portfolio optimization, mean-variance optimization
 
 ---
@@ -233,7 +237,7 @@ Table 1 summarizes the scenario quality diagnostics for the fast-mode smoke test
 | Metric | Base Scenarios | Gaussian OT |
 |--------|---------------|-------------|
 | Bures-Wasserstein distance | 0.0303 | 0.0003 |
-| Covariance Frobenius error | --- | reduced |
+| Covariance Frobenius error | N/A | reduced |
 | Implied MVO HHI | 0.629 | 0.260 |
 | NaN fraction | 0.000 | 0.000 |
 
@@ -247,7 +251,7 @@ The validation Sharpe as a function of eta is reported in Table 2. The optimal e
 
 | Eta | Val Sharpe | Val Ann. Return | Val CVaR95 | Val HHI |
 |-----|-----------|----------------|-----------|---------|
-| 0.05 | 0.97 | --- | --- | --- |
+| 0.05 | 0.97 | N/A | N/A | N/A |
 | 0.10 | 1.95 | 21.85% | 0.0174 | 0.479 |
 | **0.50** | **2.30** | **34.93%** | **0.0203** | **0.316** |
 | 1.00 | 1.82 | 33.66% | 0.0257 | 0.738 |

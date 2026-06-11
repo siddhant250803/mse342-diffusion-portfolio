@@ -124,6 +124,14 @@ def stage_backtest_fixed():
     run("04_portfolio_baseline.py")
 
 
+def stage_backtest_rolling():
+    if not (PROJECT_ROOT / "results" / "eta_selected.csv").exists():
+        print("ERROR: results/eta_selected.csv not found.")
+        print("Run eta-sweep first: python run_project.py eta-sweep")
+        sys.exit(1)
+    run("06_compare.py")
+
+
 def stage_compare():
     if not (PROJECT_ROOT / "results" / "eta_selected.csv").exists():
         print("ERROR: results/eta_selected.csv not found.")
@@ -146,6 +154,7 @@ STAGES = {
     "finetune":          stage_finetune,
     "eta-sweep":         stage_eta_sweep,
     "backtest-fixed":    stage_backtest_fixed,
+    "backtest-rolling":  stage_backtest_rolling,
     "compare":           stage_compare,
     "report-assets":     stage_report_assets,
     "all": None,  # handled below

@@ -43,11 +43,13 @@ def load_model(ckpt_path="checkpoints/score_model_base.pt"):
 
 
 @torch.no_grad()
-def reverse_sde(model, n_samples=10000, n_steps=500, seed=42, d=None):
+def reverse_sde(model, n_samples=10000, n_steps=500, seed=42, d=None,
+                ckpt_path="checkpoints/score_model_base.pt"):
     """Euler-Maruyama reverse SDE sampler."""
     torch.manual_seed(seed)
-    ckpt = torch.load("checkpoints/score_model_base.pt", map_location="cpu", weights_only=True)
-    d = ckpt["d"]
+    if d is None:
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        d = ckpt["d"]
     Y  = torch.randn(n_samples, d, device=DEVICE)
     dt = 1.0 / n_steps
     ts = torch.linspace(1.0, dt, n_steps, device=DEVICE)

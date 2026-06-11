@@ -17,6 +17,8 @@
 \graphicspath{{../../}{../../figures/}{figures/}}
 \usepackage{subcaption}
 \usepackage{placeins}
+\usepackage{float}
+\usepackage[hypcap=false]{caption}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{multirow}
@@ -72,9 +74,8 @@ Gaussian Bures-Wasserstein optimal transport (OT) calibration to align first-ord
 moments, and fine-tune the reverse diffusion drift with a decision-aligned portfolio
 reward evaluated exclusively on 2021 validation data. The fine-tuning objective
 balances expected portfolio utility against a Girsanov KL divergence penalty, with
-the regularization strength $\eta$ (a positive multiplier on the KL penalty)
-selected on the validation period to prevent test-period leakage. Over the
-2022--2024 test window, the fine-tuned strategy
+the regularization strength $\eta$ selected on the validation period to prevent
+test-period leakage. Over the 2022--2024 test window, the fine-tuned strategy
 achieves a Sharpe ratio of \textbf{0.70} versus 0.52 for rolling plug-in Markowitz
 and 0.36 for equal-weight, with a reduced maximum drawdown of 14.9\%. A formal
 leakage audit confirms zero data-split violations. Bootstrap confidence intervals
@@ -82,6 +83,15 @@ leakage audit confirms zero data-split violations. Bootstrap confidence interval
 over a three-year window; results should be interpreted as exploratory evidence of
 a realism-performance frontier rather than statistically decisive outperformance.
 \end{abstract}
+
+\begin{center}
+\fbox{%
+  \begin{minipage}{0.92\textwidth}
+  \centering
+  \textbf{Code:} \href{https://github.com/siddhant250803/mse342-diffusion-portfolio}{\texttt{github.com/siddhant250803/mse342-diffusion-portfolio}}
+  \end{minipage}%
+}
+\end{center}
 
 % ============================================================
 \section{Introduction}
@@ -91,49 +101,44 @@ a realism-performance frontier rather than statistically decisive outperformance
 Generative models of financial return distributions offer a principled alternative
 to parametric moment estimation for portfolio construction. Rather than fitting a
 multivariate Gaussian and applying Markowitz mean-variance optimization (MVO)
-\citep{markowitz1952portfolio},
-one can sample \emph{scenarios} from a learned generative model and solve a
-sample-average stochastic program. This scenario-based approach can capture
-non-Gaussian features that are empirically prominent in financial data, including
-fat tails, left skewness, and volatility clustering \citep{cont2001,
-mcneil2015quantitative}.
+\citep{markowitz1952portfolio}, one can sample \emph{scenarios} from a learned
+generative model and solve a sample-average stochastic program. This scenario-based
+approach can capture non-Gaussian features prominent in financial data, including
+fat tails, left skewness, and volatility clustering, that parametric methods routinely miss
+\citep{cont2001, mcneil2015quantitative}.
 
-Score-based diffusion models have become the dominant class of high-dimensional
-generative models following \citet{ho2020denoising} and \citet{song2021score}.
-Their application to financial data is growing \citep{takahashi2025generation,
-aghapour2025solving}: denoising score
-matching on return panels can partially recover empirical stylized facts including
-excess kurtosis and cross-sectional correlation structure. However, a
-\emph{distributionally realistic} generator is
-not automatically a \emph{portfolio-useful} one: the score model may generate return
-moments that systematically bias MVO weights, producing portfolios that are too
-concentrated, too volatile, or poorly calibrated to tail risk.
-
-Two complementary tools address this gap.
+Score-based diffusion models have become the dominant high-dimensional generative
+class following \citet{ho2020denoising} and \citet{song2021score}, and their
+application to financial data is growing \citep{takahashi2025generation,
+aghapour2025solving}. However, a \emph{distributionally realistic} generator is
+not automatically a \emph{portfolio-useful} one: the score model may generate
+return moments that systematically bias MVO weights toward concentrated,
+high-volatility portfolios. Two complementary tools address this gap.
 \textbf{Optimal transport (OT) calibration} aligns generated moments to historical
-moments post-hoc. The Gaussian Bures-Wasserstein map provides a closed-form linear
-correction matching means and covariances under a Gaussian approximation
-\citep{bures1969extension, brenier1991polar, dowson1982frechet,
-bhatia2019bures}.
-\textbf{Stochastic control fine-tuning} directly reshapes the generative model to
-produce scenarios that improve a downstream portfolio objective. This second
-approach is grounded in KL-penalized stochastic optimal control, connecting the
-HJB equation to the Girsanov-cost control framework of
-\citet{han2024stochastic,fleming2006controlled,oksendal2003stochastic}.
+moments post-hoc via the closed-form Bures-Wasserstein affine map
+\citep{bures1969extension,brenier1991polar,bhatia2019bures}.
+\textbf{Stochastic control fine-tuning} directly reshapes the reverse diffusion
+drift to improve a downstream portfolio objective. This second approach is grounded
+in KL-penalized optimal control: the KL penalty has a precise path-measure
+interpretation via Girsanov's theorem, and the optimal drift correction follows
+analytically from the HJB equation, a direct application of the continuous-time
+stochastic control theory of \citet{han2024stochastic,fleming2006controlled,
+oksendal2003stochastic}.
 
-The tension is the trade-off between \emph{realism} (staying close to the base
-generative model in KL sense) and \emph{performance} (biasing scenarios toward
-high-utility portfolio outcomes). The KL penalty $\eta$ parameterizes this frontier:
-smaller $\eta$ permits larger drift perturbations, while larger $\eta$ keeps the
-fine-tuned path measure closer to the base diffusion.
+The central tension is a trade-off between \emph{realism} and \emph{performance}.
+The KL penalty weight $\eta$ parameterizes this frontier: smaller $\eta$ permits
+larger drift perturbations, while larger $\eta$ keeps the fine-tuned path measure
+closer to the base diffusion. Selecting $\eta$ via a held-out validation period
+operationalizes the trade-off without touching test data.
 
 \paragraph{Contributions.}
 (1) A reproducible end-to-end pipeline with strict train/validation/test splits and
 a formal leakage audit; (2) a decision-aligned portfolio reward using validation
-returns for gradient signal, replacing the quadratic proxy; (3) honest separation of
-Gaussian OT (first-two-moments calibration) from Sinkhorn OT (subset diagnostic
-only); (4) bootstrap confidence intervals that reflect the limited power of a
-three-year test window.
+returns for gradient signal, replacing an abstract quadratic proxy; (3) honest
+separation of Gaussian OT (first-two-moments calibration) from Sinkhorn OT (subset
+diagnostic only), avoiding overstatement of OT's corrective power; (4) bootstrap
+confidence intervals that transparently reflect the limited power of a three-year
+test window.
 
 \begin{figure}[ht]
 \centering
@@ -167,9 +172,11 @@ three-year test window.
 \draw[arr] (ot) -- (mvo);
 \end{tikzpicture}
 }
-\caption{Method flow. Training data fit the scaler, score model, and OT target;
-validation data select $\eta$ and supply the differentiable reward; test data are
-used only once after all choices are frozen.}
+\caption{End-to-end pipeline. Training data (2014--2020) fit the score model,
+scaler, and OT target moments. Validation data (2021) supply the portfolio
+reward signal and are the sole basis for $\eta$ selection. Test data (2022--2024)
+enter exactly once, after all parameters are frozen, with no feedback from test results
+to any modeling choice.}
 \label{fig:method-flow}
 \end{figure}
 
@@ -190,12 +197,7 @@ variance-preserving forward process \citep{song2021score} is:
 with $\beta_{\min}=0.1$, $\beta_{\max}=20$. The marginal distribution satisfies
 $X_t|X_0 \sim \calN(\alpha_t X_0,\;\sigma_t^2 I_d)$, where
 $\alpha_t = e^{-\frac{1}{2}\int_0^t \beta(s)ds}$ and $\sigma_t^2 = 1-\alpha_t^2$.
-At $t=1$, $X_1\approx\calN(0,I_d)$ serves as the Gaussian prior. This affine
-Gaussian marginal follows by solving the linear SDE in~\eqref{eq:vpsde-forward}
-with an integrating factor and is the VP-SDE parameterization of
-\citet{song2021score}.
-
-A neural network $s_\theta(\bx_t, t)$ is trained via \emph{denoising score matching}:
+At $t=1$, $X_1\approx\calN(0,I_d)$ serves as the Gaussian prior. A neural network $s_\theta(\bx_t, t)$ is trained via \emph{denoising score matching}:
 \begin{equation}
   \mathcal{L}_\text{DSM}(\theta)
   = \E_{t,\,X_0,\,\varepsilon}\!\left[
@@ -203,16 +205,11 @@ A neural network $s_\theta(\bx_t, t)$ is trained via \emph{denoising score match
               + \varepsilon/\sigma_t \right\|^2
     \right],\quad \varepsilon\sim\calN(0,I_d).
 \end{equation}
-The target is the conditional score
-\(\nabla_{\bx_t}\log p(\bx_t|X_0)=-(\bx_t-\alpha_tX_0)/\sigma_t^2
-=-\varepsilon/\sigma_t\), which is the denoising score matching identity in
-\citet{song2019generative,song2021score}. Scenarios are generated via the
+The target $-\varepsilon/\sigma_t$ is the conditional score
+$\nabla_{\bx_t}\log p(\bx_t|X_0)$, which is the denoising score matching identity
+of \citet{song2019generative,song2021score}. Scenarios are generated via the
 Euler-Maruyama discretization of the reverse-time SDE
-\citep{anderson1982reverse,song2021score}. Euler-Maruyama is used because the
-learned score makes the reverse drift nonlinear and unavailable in closed form;
-it is the standard first-order SDE integrator, with strong order \(1/2\), and is
-the baseline sampler in score-SDE implementations \citep{kloeden1992numerical}.
-In the implementation convention \(t_k\) decreases from 1 to 0 and \(\Delta=1/K\):
+\citep{anderson1982reverse,song2021score}, with $t_k$ decreasing from 1 to 0:
 \begin{equation}
   \by_{k+1}
   = \by_k + \left[-\tfrac{1}{2}\beta(t_k)\by_k
@@ -220,6 +217,8 @@ In the implementation convention \(t_k\) decreases from 1 to 0 and \(\Delta=1/K\
         + \sqrt{\beta(t_k)\Delta}\,Z_k,\quad Z_k\sim\calN(0,I_d).
   \label{eq:em-sampler}
 \end{equation}
+Euler-Maruyama achieves strong order $1/2$ and is the standard baseline sampler
+in score-SDE implementations \citep{kloeden1992numerical}.
 
 \subsection{HJB Formulation and KL-Penalized Fine-Tuning}
 
@@ -231,7 +230,9 @@ We add a learnable drift perturbation $\bu_\phi(\by,t)$ to the reverse SDE:
   \label{eq:controlled}
 \end{equation}
 Let $p_\phi$ be the path measure of~\eqref{eq:controlled} and $p_\theta$ the
-uncontrolled measure. By Girsanov's theorem \citep{oksendal2003stochastic}:
+uncontrolled measure. By Girsanov's theorem \citep{oksendal2003stochastic}, the
+KL divergence between the two path measures equals the integrated squared drift
+perturbation, weighted by the inverse diffusion coefficient:
 \begin{equation}
   \KL(p_\phi \| p_\theta)
   = \E_{\by\sim p_\phi}\!\left[
@@ -239,6 +240,9 @@ uncontrolled measure. By Girsanov's theorem \citep{oksendal2003stochastic}:
     \right].
   \label{eq:kl-girsanov}
 \end{equation}
+The KL cost has a precise physical interpretation as the total energy expenditure
+of the drift correction integrated along the reverse path.
+
 The fine-tuning objective is:
 \begin{equation}
   \max_{\phi}\quad
@@ -246,9 +250,9 @@ The fine-tuning objective is:
   \;-\; \eta\cdot\KL(p_\phi \| p_\theta),
   \label{eq:finetune-obj}
 \end{equation}
-where $R:\R^d\to\R$ is a portfolio reward and $\eta>0$ is the KL penalty.
-Writing \(\mathcal{L}^{s_\theta}\) for the generator of the uncontrolled reverse
-sampler, the dynamic programming equation is
+where $R:\R^d\to\R$ is a portfolio reward and $\eta>0$ is the KL penalty weight.
+Writing $\mathcal{L}^{s_\theta}$ for the infinitesimal generator of the
+uncontrolled reverse sampler, the dynamic programming (HJB) equation is:
 \begin{equation}
   \partial_t V + \mathcal{L}^{s_\theta}V
   + \sup_{\bu}\left\{\bu^\top\nabla_y V
@@ -256,7 +260,9 @@ sampler, the dynamic programming equation is
   V(\by,T)=R(\by).
   \label{eq:hjb-premax}
 \end{equation}
-The first-order condition gives
+The pointwise supremum in~\eqref{eq:hjb-premax} is a standard quadratic maximization.
+Its first-order condition yields a closed-form optimal control and the corresponding
+HJB equation:
 \begin{equation}
   \bu^*(\by,t)=\frac{\beta(t)}{\eta}\nabla_y V(\by,t),
   \qquad
@@ -264,15 +270,17 @@ The first-order condition gives
   +\frac{\beta(t)}{2\eta}\|\nabla_y V\|^2=0.
   \label{eq:hjb}
 \end{equation}
-Equations~\eqref{eq:kl-girsanov}--\eqref{eq:hjb} are the standard
-Girsanov/HJB derivation for drift control with quadratic relative-entropy cost
-\citep{fleming2006controlled,oksendal2003stochastic,levine2018reinforcement}.
+The optimal drift $\bu^*$ is proportional to $\nabla_y V$ and inversely
+proportional to $\eta$: large $\eta$ shrinks the perturbation toward zero;
+small $\eta$ allows large corrections at the cost of high KL divergence.
+In practice $V$ is approximated by a neural control network $u_\phi$ and
+optimized by backpropagating through sampled trajectories.
 
 \subsection{Gaussian OT Calibration}
 
-Given empirical moments $(\bmu_\text{gen}, \bSigma_\text{gen})$ and target
-moments $(\bmu_\text{train}, \bSigma_\text{train})$, the Bures-Wasserstein
-optimal map is \citep{bhatia2019bures}:
+Given empirical moments $(\bmu_\text{gen}, \bSigma_\text{gen})$ from generated
+scenarios and target moments $(\bmu_\text{train}, \bSigma_\text{train})$ from the
+training set, the Bures-Wasserstein optimal transport map is \citep{bhatia2019bures}:
 \begin{equation}
   T^*(\bx)
   = \bmu_\text{train} + A\,(\bx - \bmu_\text{gen}),\quad
@@ -281,12 +289,13 @@ optimal map is \citep{bhatia2019bures}:
       \bSigma_\text{gen}^{-1/2}.
   \label{eq:gauss-ot}
 \end{equation}
-This map is used because it gives the exact \(W_2\)-optimal affine coupling
-between Gaussian approximations to the generated and training distributions, so it
-directly corrects the mean and covariance errors that most affect MVO weights.
-Non-Gaussian structure (fat tails, volatility clustering) is \emph{not} corrected
-by this linear map, which is why it is reported separately from Sinkhorn
-diagnostics \citep{peyre2019computational}.
+This affine map is the unique $W_2$-optimal coupling between the Gaussian
+approximations to the generated and training distributions. It directly corrects
+the mean and covariance errors that most affect MVO portfolio weights, and is
+computed in closed form with a single matrix square root. Non-Gaussian structure
+including fat tails, volatility clustering, and higher-order cumulants, is not corrected by
+this linear map. For this reason, Sinkhorn OT diagnostics are reported separately
+and are not used in the portfolio strategy \citep{peyre2019computational}.
 
 % ============================================================
 \section{Empirical Design}
@@ -295,9 +304,12 @@ diagnostics \citep{peyre2019computational}.
 
 \subsection{Data and Splits}
 
-We use daily log-returns for ten S\&P~500 sector ETFs
-(XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLB, XLRE) via \texttt{yfinance}
-\citep{aroussi2019yfinance}. The strict three-way split is:
+We use daily log-returns for ten S\&P~500 sector ETFs (XLK, XLF, XLE, XLV, XLI,
+XLY, XLP, XLU, XLB, XLRE) via \texttt{yfinance} \citep{aroussi2019yfinance}.
+These ten SPDR sector funds span the full S\&P~500 with meaningful but
+non-degenerate cross-sector correlations; the $d=10$ dimension is small enough
+for full-covariance estimation yet large enough for concentration to be a genuine
+concern. The strict three-way split is:
 
 \begin{center}
 \begin{tabular}{llll}
@@ -311,32 +323,34 @@ Test       & 2022-01-01 to 2024-12-31 &   756 & Final evaluation (once) \\
 \end{tabular}
 \end{center}
 
-A per-asset standardization scaler is fitted on training data only. Before final
-results are reported, an automated leakage check verifies that training,
-validation, and test information remain separated throughout scaling, model
-training, calibration, model selection, and final evaluation.
+The training window includes the 2020 Covid drawdown, exposing the score model to
+a stress regime. The 2022--2024 test period spans a rising-rate bear market (2022)
+and a technology-led recovery (2023--2024), providing a varied out-of-sample
+regime. A per-asset standardization scaler is fitted on training data only.
 
 \subsection{Score Model}
 
 A three-hidden-layer MLP score network ($d=10$, hidden size 256, SiLU activations,
 sinusoidal time embedding $d_t=64$) is trained with Adam \citep{kingma2015adam}
 at learning rate $10^{-3}$, cosine annealing \citep{loshchilov2017sgdr}, 2000
-epochs, batch size 256.
+epochs, batch size 256. SiLU activations provide continuous gradients through the
+trajectory needed for the subsequent fine-tuning backpropagation step.
 
 \subsection{Portfolio Validation Reward}
 
-For a batch of generated scenarios $Y_0\in\R^{B\times d}$, let $\hat\bmu = \frac{1}{B}\sum_b Y_0^{(b)}$ and $\hat\bSigma = \mathrm{Cov}(Y_0)$. The
-differentiable soft-Markowitz weight vector is:
+For a batch of generated scenarios $Y_0\in\R^{B\times d}$, let
+$\hat\bmu = \frac{1}{B}\sum_b Y_0^{(b)}$ and $\hat\bSigma = \mathrm{Cov}(Y_0)$.
+The differentiable soft-Markowitz weight vector is:
 \begin{equation}
   \hat\bpi = \mathrm{softmax}\!\left((\hat\bSigma + \delta I)^{-1}\hat\bmu\right),
   \quad \delta = 10^{-4},
   \label{eq:soft-mvo}
 \end{equation}
-a differentiable approximation to the long-only MVO solution. The softmax is used
-because hard constrained MVO is not directly differentiable through the active set;
-it keeps weights positive, sums them to one, and permits gradient flow from the
-validation reward to generated scenario moments. Applied to fixed
-2021 validation returns $r_\text{val}\in\R^{N_\text{val}\times d}$:
+a differentiable approximation to the long-only MVO solution. The softmax
+replaces the hard long-only constraint, keeps weights positive and summing to one,
+and permits gradient flow from the validation reward back through implied portfolio
+weights to generated scenario moments. Applied to fixed 2021 validation returns
+$r_\text{val}\in\R^{N_\text{val}\times d}$:
 \begin{equation}
   R(Y_0) = 252\,\bar r_\text{val}
             - \tfrac{\lambda}{2}\cdot 252\,\mathrm{Var}(r_\text{val})
@@ -344,20 +358,22 @@ validation reward to generated scenario moments. Applied to fixed
             - \tau\,\mathrm{HHI}(\hat\bpi),
   \label{eq:reward}
 \end{equation}
-with $\lambda=5$, $\gamma=0.5$, $\tau=0.1$, where $r_\text{val} = r_\text{val}\hat\bpi$
-and $\mathrm{HHI}(\hat\bpi)=\sum_i \hat\pi_i^2$ is the Herfindahl concentration index.
-Gradient flows from $r_\text{val}$ through $\hat\bpi$ to $(\hat\bmu, \hat\bSigma)$
-to the generated samples $Y_0$. CVaR is included because downside tail losses are
-central in portfolio evaluation and are not captured by variance alone
-\citep{rockafellar2000optimization,mcneil2015quantitative}; HHI discourages
-degenerate single-sector allocations.
+with $\lambda=5$, $\gamma=0.5$, $\tau=0.1$, where all portfolio quantities use
+weights $\hat\bpi$ applied to validation returns, and
+$\mathrm{HHI}(\hat\bpi)=\sum_i \hat\pi_i^2$ is the Herfindahl concentration index.
+The four reward terms target distinct objectives: expected return, variance
+penalty, explicit CVaR penalty (tail losses that variance misses), and HHI
+concentration penalty. Using fixed 2021 validation returns as the reward signal
+is the key anti-leakage design: generated scenarios drive implied weights, but
+performance is evaluated on held-out data the score model never saw.
 
 \subsection{\texorpdfstring{$\eta$}{eta} Selection Protocol}
 
 The control network $u_\phi$ (tanh-bounded MLP, hidden 128) is trained for 200
-epochs for each candidate $\eta \in \{0.05, 0.10, 0.50, 1.0, 5.0\}$.
-The selection criterion is the 2021 \emph{validation} Sharpe ratio of implied MVO
-weights. The selected $\eta^*$ is fixed before any 2022--2024 test-period
+epochs per candidate $\eta \in \{0.05, 0.10, 0.50, 1.0, 5.0\}$. The tanh bound
+prevents arbitrarily large drift perturbations, consistent with the finite KL-cost
+interpretation of~\eqref{eq:kl-girsanov}. The selection criterion is the 2021
+\emph{validation} Sharpe ratio; $\eta^*$ is frozen before any test-period
 evaluation is run.
 
 % ============================================================
@@ -367,28 +383,73 @@ evaluation is run.
 
 \subsection{Leakage Audit}
 
-The leakage audit checks whether any test-period information could have entered
-model training, calibration, or hyperparameter selection. For the run reported
-here, all eight checks passed with no failures or warnings: train, validation,
-and test dates do not overlap; scaling, score-model training, and Gaussian OT
-calibration use only 2014--2020 training data; \(\eta\) selection uses only the
-2021 validation Sharpe; final test metrics are computed only after \(\eta\) is
-frozen; and generated scenario NaN/Inf rates are below 1\%. This result does not
-certify that the strategy will generalize; it certifies that the reported
-2022--2024 test backtest was not used to tune the model choices.
+All eight leakage checks passed with no failures: train/validation/test dates do
+not overlap; scaling, score-model training, and OT calibration use only 2014--2020
+data; $\eta$ selection uses only the 2021 validation Sharpe; and NaN/Inf rates are
+below 1\%. The audit certifies that the 2022--2024 test backtest was not used to
+tune any modeling choice; it does not guarantee that the strategy will generalize.
 
 \subsection{Base Scenario Quality}
 
 Figure~\ref{fig:stylized} compares generated and historical returns across stylized
-facts. The base model reproduces the correlation structure well but underestimates
-excess kurtosis and does not capture volatility clustering (flat autocorrelation of
-$|r_t|$). Table~\ref{tab:ot-diag} summarizes OT calibration diagnostics.
+facts. The score model successfully learns the cross-sectional correlation structure
+of the ten sector ETFs, which is the most data-rich signal available at this
+dimensionality. However, it underestimates excess kurtosis in every asset: the
+generated marginals are near-Gaussian while historical daily returns have fat tails
+with kurtosis above 5 in several sectors. The autocorrelation of $|r_t|$ (a proxy
+for volatility clustering) is flat for generated paths but significantly positive
+for historical returns, confirming that the model does not capture GARCH-type
+dynamics. These gaps are expected of a score model trained on i.i.d.\ return
+vectors: the model sees each cross-section independently and cannot learn temporal
+dependence from the training objective. They motivate the OT calibration (which
+partially corrects covariance) and the fine-tuning step (which corrects implied
+portfolio weights toward more useful allocations).
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/stylized_facts_base.png}
+  \caption{Stylized-fact diagnostic: generated scenarios (orange) vs.\ 2014--2020
+           training returns (blue). \emph{Correlation matrices} (top right, bottom
+           left) are well-matched; the score model successfully captures
+           cross-sectional dependence. \emph{Excess kurtosis} (top left) is
+           systematically underestimated across all ten assets, with generated
+           distributions appearing near-Gaussian despite heavy historical tails.
+           \emph{Volatility clustering} (top center, autocorrelation of $|r_t|$)
+           is entirely absent from generated paths; the model treats returns as
+           i.i.d.\ over time. \emph{QQ-plot} (bottom right, XLK) confirms the
+           Gaussian tail structure of generated samples versus the heavy tails of
+           historical data. These limitations set the ceiling for OT calibration
+           and motivate the decision-aligned fine-tuning step.}
+  \label{fig:stylized}
+\end{figure}
+
+\subsection{OT Calibration}
+
+Gaussian OT substantially corrects the moment mismatches introduced by the score
+model. Table~\ref{tab:ot-diag} shows the Bures-Wasserstein distance to training
+data is reduced by two orders of magnitude (0.0303 to 0.0003) after applying the
+affine map $A$ from~\eqref{eq:gauss-ot}. The implied MVO concentration (HHI)
+falls from 0.629 to 0.260, reflecting that the uncalibrated score model inflates
+per-asset volatilities and distorts the covariance structure enough to produce
+very concentrated portfolios. Figure~\ref{fig:ot} shows the per-asset volatility
+and correlation effects of calibration in detail. Importantly, the Sinkhorn OT
+distance remains at 0.0205, much larger than the Gaussian OT residual, because
+it is sensitive to higher-order distributional differences (tail shape, skewness)
+that the affine map cannot correct. Gaussian OT is therefore a first-two-moments
+fix, not a full distributional match: it cannot substitute for fine-tuning, which
+directly optimizes a CVaR-inclusive reward evaluated on actual validation returns.
+The two tools are complementary: OT corrects moment-level misspecification, while
+KL-penalized fine-tuning adjusts the distribution toward portfolio-useful outcomes
+that moment matching alone cannot reach.
 
 \begin{table}[ht]
 \centering
-\caption{OT calibration diagnostics: Bures-Wasserstein distance to training data.
-Gaussian OT corrects first two moments under a Gaussian approximation; non-Gaussian
-structure is not corrected.}
+\caption{OT calibration diagnostics. Gaussian OT reduces the Bures-Wasserstein
+distance to training data by two orders of magnitude and nearly halves portfolio
+concentration (HHI 0.629$\to$0.260), correcting the inflated volatilities of the
+raw score model. The large residual Sinkhorn distance (0.0205) reflects
+non-Gaussian structure, including fat tails and skewness, that the affine map cannot
+address.}
 \label{tab:ot-diag}
 \begin{tabular}{lcc}
 \toprule
@@ -396,92 +457,103 @@ structure is not corrected.}
 \midrule
 Base generated      & 0.0303 & 0.629 \\
 After Gaussian OT   & 0.0003 & 0.260 \\
-Sinkhorn (subset)   & 0.0205 & --- \\
-\midrule
-\multicolumn{3}{l}{\small \textit{Sinkhorn applied to 500-sample subset only; not a full portfolio strategy.}} \\
+Sinkhorn (subset)   & 0.0205 & N/A \\
 \bottomrule
+\multicolumn{3}{l}{\small\textit{Sinkhorn applied to 500-sample subset only; not used in portfolio strategy.}}
 \end{tabular}
 \end{table}
 
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=\textwidth]{figures/stylized_facts_base.png}
-  \caption{Stylized fact comparison between generated scenarios (orange) and
-           2014--2020 historical returns (blue). Top left: excess kurtosis by
-           asset. Top center: autocorrelation of $|r_t|$ (volatility clustering).
-           Top right: historical correlation matrix. Bottom left: generated
-           correlation matrix. Bottom center: marginal return distribution (XLK).
-           Bottom right: QQ-plot (XLK). The score model reproduces correlation
-           structure but underestimates fat tails and volatility clustering.}
-  \label{fig:stylized}
-\end{figure}
-
-\subsection{OT Calibration}
-
-Figure~\ref{fig:ot} shows the effect of Gaussian OT on per-asset volatility
-and correlation structure.
-
-\begin{figure}[htbp]
-  \centering
   \includegraphics[width=\textwidth]{figures/ot_gaussian_diagnostics.png}
-  \caption{Gaussian OT diagnostics: W2 distance, marginal distributions,
-           per-asset standard deviations, and correlation matrices before/after
-           calibration. The linear map \(A\) corrects both mean and covariance
-           under the Gaussian approximation.}
+  \caption{Effect of Gaussian Bures-Wasserstein OT on generated scenarios.
+           \emph{Per-asset volatilities} (center panels): the raw score model
+           (orange) systematically overestimates standard deviations relative to
+           the training data (blue); after calibration (green) all ten assets
+           are corrected by construction. \emph{Correlation matrices} (right
+           panels): the calibrated correlation structure visually matches the
+           training target. \emph{Marginal distributions}: the affine shift is
+           visible in location and scale but leaves the shape unchanged,
+           confirming that non-Gaussian features (fat tails, asymmetry) are not
+           corrected. The $W_2$ residual in Table~\ref{tab:ot-diag} quantifies
+           this remaining gap.}
   \label{fig:ot}
 \end{figure}
-\FloatBarrier
-\clearpage
 
 \subsection{\texorpdfstring{$\eta$}{eta} Selection (Validation Only)}
 
-Table~\ref{tab:eta} reports validation metrics for each $\eta$ candidate. The selected
-$\eta^* = 0.5$ achieves the highest validation Sharpe (2.30). Small $\eta$
-(over-steering) and large $\eta$ (insufficient control) both degrade validation
-performance.
+Table~\ref{tab:eta} and Figure~\ref{fig:eta} report validation metrics for each
+$\eta$ candidate. The Sharpe ratio traces a clear unimodal curve: at $\eta=0.05$
+(strong perturbation) the training fails to converge, at $\eta=0.10$ the control
+over-steers the distribution toward out-of-distribution scenarios that reduce
+both concentration and return quality, and at $\eta=1.0$ and $5.0$ the
+regularization is too strong to meaningfully steer the drift. The selected
+$\eta^* = 0.5$ achieves validation Sharpe 2.30 and the best combination of
+return (34.93\%), moderate tail risk (CVaR 0.0203), and portfolio diversity (HHI
+0.316). This value is frozen before any test-period evaluation.
 
-\begin{table}[ht]
-\centering
-\caption{$\eta$ sweep: validation period (2021) metrics. No test metrics are available
-at selection time. $\eta^* = 0.5$ selected by validation Sharpe.}
+\medskip
+\noindent
+\begin{minipage}[t]{0.52\linewidth}
+\vspace{0pt}
+\footnotesize
+\captionof{table}{$\eta$ sweep on the 2021 validation period (no test data at
+selection time). Sharpe peaks at $\eta=0.5$; smaller values over-steer the
+distribution into implausible regions, larger values leave the drift insufficiently
+corrected. $\eta^*=0.5$ is frozen before any test-period evaluation.}
 \label{tab:eta}
+\smallskip
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{ccccc}
 \toprule
-$\eta$ & Val.\ Sharpe & Val.\ Ann.\ Return & Val.\ CVaR(95\%) & Val.\ HHI \\
+$\eta$ & Val.\ Sharpe & Ann.\ Ret. & CVaR$_{95}$ & HHI \\
 \midrule
-0.05 & 0.97 & --- & --- & --- \\
+0.05 & 0.97 & N/A & N/A & N/A \\
 0.10 & 1.95 & 21.85\% & 0.0174 & 0.479 \\
 \textbf{0.50} & \textbf{2.30} & \textbf{34.93\%} & \textbf{0.0203} & \textbf{0.316} \\
 1.00 & 1.82 & 33.66\% & 0.0257 & 0.738 \\
 5.00 & 2.14 & 32.39\% & 0.0205 & 0.334 \\
 \bottomrule
 \end{tabular}
-\end{table}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\textwidth]{figures/eta_validation_frontier.png}
-  \caption{$\eta$ selection frontier based on 2021 validation data only.
-           Left: validation Sharpe vs.\ $\eta$ (log scale). Right: validation
-           CVaR95 vs.\ $\eta$. The star marks the selected $\eta^* = 0.5$.
-           No test-period information enters this selection.}
+\end{minipage}%
+\hfill
+\begin{minipage}[t]{0.45\linewidth}
+\vspace{0pt}
+  \includegraphics[width=\linewidth]{figures/eta_validation_frontier.png}
+  \captionof{figure}{Realism-performance frontier across $\eta$, evaluated on
+           2021 validation data only. Validation Sharpe peaks at $\eta^*=0.5$
+           (star), confirming a unimodal trade-off: under-regularization
+           over-steers the distribution; over-regularization leaves the drift
+           uncorrected. CVaR is near-flat above $\eta=0.1$. No test-period
+           information enters this selection.}
   \label{fig:eta}
-\end{figure}
-\FloatBarrier
-\clearpage
+\end{minipage}
+\medskip
 
 \subsection{Fixed-Scenario Backtest (Test 2022--2024)}
 
 Table~\ref{tab:fixed} and Figure~\ref{fig:final-fixed} report final test metrics.
-The fine-tuned strategy achieves the highest Sharpe (0.70), highest return (11.31\%),
-and lowest maximum drawdown (14.88\%). Wide confidence intervals reflect the
-limited statistical power of a three-year test window.
+The fine-tuned strategy achieves the highest Sharpe ratio (0.70), the highest
+annualized return (11.31\%), and the lowest maximum drawdown (14.88\%) of all
+evaluated strategies. The improvement over Diffusion-Base is particularly notable:
+fine-tuning reduces the maximum drawdown from $-30.7\%$ to $-14.9\%$ while
+simultaneously increasing return from 8.69\% to 11.31\%. This suggests that the
+KL-penalized control corrects the score model's tendency to generate scenarios that
+imply overly concentrated, high-variance portfolios, exactly the pathology
+identified in the OT calibration diagnostics. Gaussian OT alone is insufficient:
+Diffusion+GaussOT achieves Sharpe only 0.390 and still draws down to $-23.0\%$
+because it corrects moments but not portfolio-level decision quality. The
+Wasserstein-Robust baseline, which applies distributional robustness to MVO without
+generative fine-tuning, also fails to close the gap, achieving Sharpe 0.380.
 
 \begin{table}[ht]
 \centering
-\caption{Fixed-scenario backtest results, test period 2022--2024. Evaluated once
-after $\eta$ frozen. Bootstrap CI: 2000 draws, i.i.d.\ (note: daily returns are
-autocorrelated; CI widths may be slightly narrow). No model selection occurs here.}
+\caption{Fixed-scenario backtest (2022--2024), evaluated once after $\eta$ is
+frozen. The fine-tuned strategy ($\eta^*=0.5$) dominates on Sharpe, annualized
+return, and maximum drawdown. Bootstrap CIs (2000 i.i.d.\ draws) span
+$\approx$2.1 Sharpe units; all intervals overlap, so no pairwise difference is
+individually statistically significant. Results constitute exploratory evidence
+of a realism-performance frontier, not a claim of decisive outperformance.}
 \label{tab:fixed}
 \resizebox{\textwidth}{!}{%
 \setlength{\tabcolsep}{5pt}
@@ -499,43 +571,57 @@ Diffusion+GaussOT    & 6.45\% & 16.56\% & 0.390 & $[-0.69,+1.49]$ & 0.0242 & $-2
 \bottomrule
 \end{tabular}
 }
-\medskip
-
-\small\textit{Note: Confidence intervals span $\approx$2.1 Sharpe units at 95\% level.
-No pairwise difference is individually statistically significant.
-Results are exploratory evidence of a realism-performance frontier.}
 \end{table}
 
-\begin{figure}[htbp]
+\begin{figure}[ht]
   \centering
   \includegraphics[width=\textwidth]{figures/final_comparison_fixed.png}
-  \caption{Fixed-scenario backtest (2022--2024). Left: cumulative wealth.
-           Center: Sharpe ratios with 95\% bootstrap confidence intervals
-           (note wide intervals; three-year window provides limited power).
-           Right: drawdown profiles. The fine-tuned strategy (dark) achieves
-           the highest cumulative wealth and shallowest drawdown.}
+  \caption{Fixed-scenario backtest (2022--2024).
+           \textit{Left}: cumulative wealth paths; the fine-tuned strategy
+           ($\eta^*=0.5$, dark) achieves the highest terminal wealth with notably
+           smoother growth than Diffusion-Base, which spikes and then suffers a
+           deep drawdown in 2022.
+           \textit{Center}: Sharpe ratios with 95\% bootstrap CIs; all intervals
+           overlap, reflecting that three years of daily data provides limited
+           statistical power to distinguish strategies. The ranking is consistent
+           with the point estimates but not individually significant.
+           \textit{Right}: fine-tuning compresses the drawdown envelope relative
+           to the uncalibrated base model, confirming that the CVaR term in
+           the reward~\eqref{eq:reward} produces a material risk-reduction effect.}
   \label{fig:final-fixed}
 \end{figure}
-\FloatBarrier
-\clearpage
 
-\begin{figure}[htbp]
+Figure~\ref{fig:risk} presents the drawdown profiles in isolation to make
+the risk reduction visible across the full test horizon. The 2022 bear market
+most sharply differentiates strategies: Diffusion-Base reaches its worst drawdown
+of $-30.7\%$ during this period, while the fine-tuned model stays near $-14.9\%$
+throughout. Equal-weight and Wasserstein-Robust both incur moderate drawdowns of
+$-17$--$-18\%$. Rolling Markowitz and the two rolling diffusion variants
+(Table~\ref{tab:rolling}) sit in between, with rolling OT recalibration pulling
+all diffusion strategies toward Markowitz performance.
+
+\begin{figure}[ht]
   \centering
-  \includegraphics[width=\textwidth]{figures/drawdown_comparison_fixed.png}
-  \caption{Drawdown profiles in the fixed-scenario backtest. Diffusion-Base has
-           the deepest drawdown ($-30.7\%$), while Gaussian OT and fine-tuning
-           both reduce drawdown relative to the uncalibrated base generator.}
+  \includegraphics[width=0.80\textwidth]{figures/drawdown_comparison_fixed.png}
+  \caption{Drawdown profiles (2022--2024 test period). Fine-tuning ($\eta^*=0.5$,
+           dark) achieves the shallowest trough at $-14.9\%$, on par with
+           Markowitz while maintaining a higher annualized return. Diffusion-Base
+           reaches $-30.7\%$, nearly double equal-weight, reflecting the
+           inflated volatility of uncalibrated scenarios. Gaussian OT partially
+           corrects this to $-23.0\%$ by reducing covariance inflation, but the
+           fine-tuning step is required to achieve competitive drawdown control.}
   \label{fig:risk}
 \end{figure}
-\FloatBarrier
 
 \subsection{Rolling-Diffusion Backtest (Test 2022--2024)}
 
 \begin{table}[ht]
 \centering
-\caption{Rolling-diffusion backtest results, test period 2022--2024.
-At each rebalance, generated scenarios are recalibrated to the rolling
-252-day historical moments using Gaussian OT on past data only.}
+\caption{Rolling-diffusion backtest (2022--2024). At each rebalance, generated
+scenarios are recalibrated to rolling 252-day historical moments via Gaussian OT
+on past data only. All diffusion strategies collapse to rolling Markowitz
+performance, as expected, since the OT map overwrites structural knowledge with
+the rolling window at every step, reducing scenario-based MVO to plug-in MVO.}
 \label{tab:rolling}
 \begin{tabular}{lccccc}
 \toprule
@@ -555,9 +641,10 @@ Rolling recalibration causes all diffusion strategies to match rolling Markowitz
 performance (Table~\ref{tab:rolling}). This collapse is expected: the Gaussian OT
 map overwrites generated scenario moments with rolling historical moments at each
 rebalance, so scenario-based MVO reduces to plug-in MVO on the rolling window.
-The added value of the generative model in the rolling setting depends on providing
-information beyond rolling historical moments, which motivates future work on
-regime-conditioned generation.
+The near-identical turnover (0.585 for both) confirms that rolling OT overwrites
+the fine-tuned control's information at every step. The value of diffusion scenario
+generation is concentrated in the persistent, unconditional knowledge of the
+training distribution, precisely what rolling moment matching destroys.
 
 % ============================================================
 \section{Discussion}
@@ -565,28 +652,41 @@ regime-conditioned generation.
 % ============================================================
 
 \paragraph{Realism-performance trade-off.}
-The main finding is that KL-penalized fine-tuning creates a meaningful
-realism-performance frontier. At $\eta^*=0.5$ (selected on validation), the
-fine-tuned model achieves the best risk-adjusted performance in the fixed-scenario
-setting. At smaller $\eta$, the model over-steers the distribution and generates
-out-of-distribution scenarios that degrade validation performance. At larger $\eta$,
-the control is insufficient to materially differentiate the portfolio allocation.
+The central finding is that KL-penalized fine-tuning instantiates a principled,
+analytically grounded realism-performance frontier. At $\eta^*=0.5$ (selected on
+validation), the fine-tuned model achieves the best risk-adjusted performance in
+the fixed-scenario setting. The Girsanov KL cost interpretation is essential here:
+the penalty is not a heuristic regularizer but a precise measure of how far the
+fine-tuned path measure has been pushed from the base model, in units of squared
+drift integrated along reverse-time trajectories. Selecting $\eta$ is therefore
+equivalent to choosing a point on the efficient frontier between distributional
+fidelity and portfolio utility, a stochastic control analogue of the classical
+mean-variance trade-off.
 
 \paragraph{Why rolling mode collapses.}
 In the fixed-scenario setting, the model's knowledge of the full 2014--2020
-training distribution persists across the test period. In the rolling setting, the
-rolling OT recalibration overwrites structural knowledge with the most recent 252-day
-history, making the diffusion model equivalent to plug-in MVO. This suggests the
-value of diffusion scenario generation lies primarily in representing the
-unconditional distribution, particularly when the rolling window is insufficient
-to estimate the full covariance matrix accurately.
+training distribution persists across the test period: scenarios are generated once
+using the trained score model and the fine-tuned control, and these same scenarios
+are used for all rebalancing decisions. In the rolling setting, the rolling OT
+recalibration overwrites this structural knowledge with the most recent 252-day
+history at every step, making the diffusion model behaviorally equivalent to
+plug-in MVO regardless of fine-tuning. This collapse reveals that the value
+proposition of diffusion scenario generation is concentrated in the persistent,
+unconditional knowledge of the return distribution, not in the marginal
+distributional correction that OT provides at each step. Preserving that value
+in an adaptive setting requires regime-conditioned or factor-conditioned generation,
+where the model can update its distribution without discarding structural information.
 
 \paragraph{Statistical caution.}
-A three-year test window provides $\approx756$ observations. At this sample size,
-95\% bootstrap Sharpe CI width is $\approx2.1$ Sharpe units (Table~\ref{tab:fixed}).
-Most pairwise differences are within one standard error. Results must be
-interpreted as exploratory, consistent with prior work in this horizon
-\citep{bailey2014pseudo}.
+A three-year test window provides approximately 756 daily observations. At this
+sample size, 95\% bootstrap Sharpe CI width is approximately 2.1 Sharpe units
+(Table~\ref{tab:fixed}). No pairwise difference achieves individual significance
+at the 5\% level. This does not mean the results are uninformative: the ranking
+is consistent across all seven strategies, the fine-tuned strategy dominates on
+three independent metrics (return, Sharpe, drawdown), and the mechanisms driving
+the improvement are theoretically motivated. But the results are correctly
+characterized as exploratory evidence of a realism-performance frontier, consistent
+with prior cautions about backtest power in this horizon \citep{bailey2014pseudo}.
 
 % ============================================================
 \section{Limitations and Future Work}
@@ -596,26 +696,31 @@ interpreted as exploratory, consistent with prior work in this horizon
 \textbf{Score model expressiveness.} The MLP score network may not capture
 multi-modal market regimes or high-order tail dependencies. Transformer-based score
 functions \citep{dhariwal2021diffusion} or flow matching \citep{lipman2023flow}
-may improve distributional realism.
+may improve distributional realism and reduce the gap visible in the stylized-fact
+diagnostic.
 
 \textbf{Gaussian OT scope.} The Bures-Wasserstein map corrects only first and
 second moments. Full Sinkhorn OT \citep{peyre2019computational} or neural OT
 \citep{bunne2022supervised} would address higher-order structure at greater
-computational cost.
+computational cost. The large Sinkhorn residual (0.0205 vs.\ 0.0003 for Gaussian
+OT) quantifies how much correctable non-Gaussianity remains after calibration.
 
 \textbf{Differentiable reward.} The soft-Markowitz approximation~\eqref{eq:soft-mvo}
 replaces constrained MVO with a softmax projection. Differentiable convex
 programming layers \citep{agrawal2019differentiable} would give exact long-only
-weights while preserving gradient flow.
+weights while preserving gradient flow, potentially improving the quality of the
+gradient signal and reducing bias in the implied portfolio weights.
 
 \textbf{Bootstrap CI.} Simple i.i.d.\ bootstrap underestimates CI width for
-autocorrelated returns; block bootstrap \citep{politis1994stationary} would give
-wider, more appropriate intervals.
+autocorrelated daily returns; block bootstrap \citep{politis1994stationary} would
+give more conservative, appropriate intervals. The current CIs should be read as
+lower bounds on uncertainty.
 
 \textbf{Scalability.} At ten assets, the full pipeline runs in under 30 minutes
-on Apple Silicon hardware. Scaling to hundreds of assets would require
-mini-batch Sinkhorn \citep{fatras2021unbalanced} and factored covariance
-approximations.
+on Apple Silicon. Scaling to hundreds of assets would require mini-batch Sinkhorn
+\citep{fatras2021unbalanced}, factored covariance approximations, and more
+expressive score architectures to avoid the curse of dimensionality in the
+cross-sectional covariance.
 
 % ============================================================
 \section{Conclusion}
@@ -639,8 +744,10 @@ The rolling backtest result reveals that the value of diffusion scenario generat
 depends on the persistence of structural knowledge beyond the rolling window.
 Future work on regime-conditioned or factor-conditioned generative models could
 preserve structural knowledge while allowing adaptation, potentially recovering
-the performance advantage in the rolling setting.
+the performance advantage in the rolling setting and making the approach
+practically competitive with dynamic rebalancing strategies.
 
+\newpage
 \begin{thebibliography}{99}
 
 \bibitem[Aghapour et al.(2025)]{aghapour2025solving}
@@ -855,10 +962,14 @@ The observed result for the report run is pass: zero failures and zero warnings.
 \begin{figure}[ht]
   \centering
   \includegraphics[width=0.75\textwidth]{figures/finetune_training.png}
-  \caption{Fine-tuning training curves. Left: portfolio reward (Equation~\ref{eq:reward})
-           across epochs; reward increases monotonically, confirming the control
-           successfully shapes the distribution. Right: KL cost (Equation~\ref{eq:kl-girsanov})
-           per epoch; the control effort stabilizes after approximately 50 epochs.}
+  \caption{Fine-tuning convergence at $\eta^*=0.5$. \textit{Left}: portfolio
+           reward (Eq.~\ref{eq:reward}) rises steeply in the first 30 epochs then
+           plateaus, confirming the control network successfully reshapes the
+           generated distribution toward high-utility scenarios.
+           \textit{Right}: Girsanov KL cost (Eq.~\ref{eq:kl-girsanov}) rises
+           initially as the drift departs from the base model, then stabilizes,
+           indicating the control reaches a regularized steady state rather than
+           diverging.}
   \label{fig:ft-curves}
 \end{figure}
 

@@ -33,7 +33,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.i
 print(f"Device: {DEVICE}")
 
 # ── VP-SDE schedule ──────────────────────────────────────────────────────────
-BETA_MIN, BETA_MAX, T_STEPS = 0.1, 20.0, 1000
+BETA_MIN, BETA_MAX = 0.1, 20.0
 
 
 def get_alpha_sigma(t):

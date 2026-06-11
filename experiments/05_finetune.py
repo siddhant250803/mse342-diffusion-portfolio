@@ -159,9 +159,10 @@ def portfolio_validation_reward(Y0, mu_S, Sigma_S, r_val_tensor,
 
 # ── SDE rollout ───────────────────────────────────────────────────────────────
 
-def rollout(base_model, ctrl_net, n_samples, n_steps=N_STEPS, ckpt_path="checkpoints/score_model_base.pt"):
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
-    d    = ckpt["d"]
+def rollout(base_model, ctrl_net, n_samples, n_steps=N_STEPS, d=None, ckpt_path="checkpoints/score_model_base.pt"):
+    if d is None:
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        d = ckpt["d"]
     Y    = torch.randn(n_samples, d, device=DEVICE)
     dt   = 1.0 / n_steps
     ts   = torch.linspace(1.0, dt, n_steps, device=DEVICE)
@@ -199,7 +200,7 @@ def finetune(base_model, mu, std, reward_mode="portfolio_validation_reward",
 
     for epoch in range(epochs):
         ctrl_net.train()
-        Y0, kl_cost = rollout(base_model, ctrl_net, BATCH, ckpt_path=ckpt_path)
+        Y0, kl_cost = rollout(base_model, ctrl_net, BATCH, d=d)
 
         # Un-standardise to return scale
         Y0_ret = Y0 * std.to(DEVICE) + mu.to(DEVICE)
@@ -235,10 +236,9 @@ def finetune(base_model, mu, std, reward_mode="portfolio_validation_reward",
 
 
 @torch.no_grad()
-def generate_finetuned(base_model, ctrl_net, mu, std, n_samples=2000,
-                       ckpt_path="checkpoints/score_model_base.pt"):
+def generate_finetuned(base_model, ctrl_net, mu, std, n_samples=2000):
     ctrl_net.eval()
-    Y0, _ = rollout(base_model, ctrl_net, n_samples, ckpt_path=ckpt_path)
+    Y0, _ = rollout(base_model, ctrl_net, n_samples, d=mu.shape[0])
     return (Y0 * std.to(DEVICE) + mu.to(DEVICE)).cpu().numpy()
 
 
